@@ -1,32 +1,66 @@
-# fnayr (Vite + React)
+# fnayr
 
-## Requirements
+A lightweight, schema-driven **Entity Component System** (ECS) engine for TypeScript. Define your components with schemas, build worlds from JSON, and run game logic with systems, queries, events, and hierarchy — all fully typed.
 
-- Node.js 18+
+Built on Vite + React.
 
-## Setup
+## Table of Contents
+
+- [Getting Started](#getting-started)
+- [Scripts](#scripts)
+- [Schemas — Define Your Data](#schemas--define-your-data)
+  - [Building a Registry](#building-a-registry)
+  - [Parsing & Serializing Worlds](#parsing--serializing-worlds)
+  - [Common Patterns](#common-patterns)
+- [Runtime — Bring It to Life](#runtime--bring-it-to-life)
+  - [Creating a World](#creating-a-world)
+  - [Systems & the Scheduler](#systems--the-scheduler)
+  - [Tags](#tags)
+  - [In-Place Mutation](#in-place-mutation)
+  - [Change Tracking](#change-tracking)
+  - [Cached Queries](#cached-queries)
+  - [System Phases](#system-phases)
+  - [Command Buffer](#command-buffer)
+  - [Resources](#resources)
+  - [Events](#events)
+  - [Entity Hierarchy](#entity-hierarchy)
+  - [Batch Spawning](#batch-spawning)
+  - [Debug Stats](#debug-stats)
+  - [Runtime/JSON Bridge](#runtimejson-bridge)
+
+## Getting Started
+
+**You'll need:** Node.js 18+ and [pnpm](https://pnpm.io/)
 
 ```sh
-pnpm install
-pnpm dev
+pnpm install   # grab dependencies
+pnpm dev       # start the dev server at http://localhost:5173
 ```
 
-Then open the URL shown in the terminal.
+That's it — open the URL and you're running.
 
 ## Scripts
 
-- `pnpm dev` – start dev server
-- `pnpm build` – production build
-- `pnpm preview` – preview production build
-- `pnpm typecheck` – TypeScript typecheck
-- `pnpm test:run` – run test suite
+| Command            | What it does                 |
+| ------------------ | ---------------------------- |
+| `pnpm dev`         | Start dev server with HMR    |
+| `pnpm build`       | Production build to `dist/`  |
+| `pnpm preview`     | Preview the production build |
+| `pnpm typecheck`   | TypeScript type checking     |
+| `pnpm test:run`    | Run the test suite           |
 
-## ECS Schema Usage
+---
 
-The engine exposes helpers to define component schemas and parse/serialize ECS worlds.
+## Schemas — Define Your Data
+
+Before you can create worlds and entities, you describe what your components look like. The schema system gives you validation, defaults, and JSON round-tripping for free.
+
+### Building a Registry
+
+A registry is just an object mapping component names to schemas. Use the `s` helper:
 
 ```ts
-import { parseWorld, serializeWorld, s } from "./src/engine";
+import { s } from "./src/engine";
 
 const registry = {
   Transform: s.object({
@@ -36,8 +70,18 @@ const registry = {
   Name: s.object({
     label: s.string(),
   }),
-  Visible: s.tag(),
+  Visible: s.tag(), // marker component, no data
 };
+```
+
+Available types: `s.number()`, `s.string()`, `s.boolean()`, `s.tuple()`, `s.object()`, and `s.tag()`.
+
+### Parsing & Serializing Worlds
+
+Got a JSON file describing a world? Parse it into a validated structure, then serialize it back whenever you need to save:
+
+```ts
+import { parseWorld, serializeWorld } from "./src/engine";
 
 const worldJson = {
   version: 1,
@@ -53,6 +97,7 @@ const worldJson = {
   ],
 };
 
+// JSON -> validated world
 const parsed = parseWorld(registry, worldJson, {
   applyDefaults: true,
   allowUnknownComponents: false,
@@ -60,59 +105,68 @@ const parsed = parseWorld(registry, worldJson, {
 });
 
 if (parsed.issues.length > 0) {
-  console.log(parsed.issues);
+  console.log(parsed.issues); // see what went wrong
 }
 
+// validated world -> JSON
 const serialized = serializeWorld(registry, parsed.world, {
   stripUnknownComponents: false,
 });
-
-console.log(serialized.json, serialized.issues);
 ```
 
-Common patterns:
+### Common Patterns
 
-- Preserve modded components (permissive):
-  - `parseWorld(registry, json, { allowUnknownComponents: true })`
-- Allow per-object freeform JSON (e.g. asset options):
-  - `s.object({}, { allowUnknown: true })`
-- Keep serialization strict but non-destructive:
-  - `serializeWorld(registry, world, { stripUnknownComponents: false })`
+| What you want | How to get it |
+| ------------- | ------------- |
+| Keep modded/unknown components intact | `parseWorld(registry, json, { allowUnknownComponents: true })` |
+| Allow freeform JSON inside an object | `s.object({}, { allowUnknown: true })` |
+| Serialize strictly without losing data | `serializeWorld(registry, world, { stripUnknownComponents: false })` |
 
-## ECS Runtime Usage
+---
 
-The runtime ECS API is available under the `ecs` namespace export.
+## Runtime — Bring It to Life
 
-### Basic world and systems
+Once you have a registry, the runtime API (under the `ecs` namespace) lets you create worlds, spawn entities, run systems, and react to changes — all fully typed against your schema.
+
+### Creating a World
 
 ```ts
 import { ecs, s } from "./src/engine";
 
 const registry = {
-  Transform: s.object({ x: s.number() }),
-  Velocity: s.object({ x: s.number() }),
+  Position: s.object({ x: s.number(), y: s.number() }),
+  Velocity: s.object({ x: s.number(), y: s.number() }),
 };
 
 const world = ecs.createWorld(registry);
-const entity = world.createEntity();
-world.addComponent(entity, "Transform", { x: 0 });
-world.addComponent(entity, "Velocity", { x: 2 });
 
+const entity = world.createEntity();
+world.addComponent(entity, "Position", { x: 0, y: 0 });
+world.addComponent(entity, "Velocity", { x: 2, y: 1 });
+```
+
+### Systems & the Scheduler
+
+Systems are just functions. The scheduler calls them every frame with the world and a delta time:
+
+```ts
 const scheduler = new ecs.Scheduler(world);
+
 scheduler.addSystem((world, dt) => {
-  for (const { entity, components } of world.query(["Transform", "Velocity"])) {
-    world.addComponent(entity, "Transform", {
-      x: components.Transform.x + components.Velocity.x * dt,
+  for (const { entity, components } of world.query(["Position", "Velocity"])) {
+    world.addComponent(entity, "Position", {
+      x: components.Position.x + components.Velocity.x * dt,
+      y: components.Position.y + components.Velocity.y * dt,
     });
   }
 });
 
-scheduler.runFrame(0.5);
+scheduler.runFrame(0.5); // advance by 0.5 seconds
 ```
 
-### Tags (marker components)
+### Tags
 
-Tag components carry no data — useful for flags like "Visible" or "Player":
+Tags are marker components with no data — perfect for flags like "Player" or "Visible":
 
 ```ts
 const registry = {
@@ -122,89 +176,92 @@ const registry = {
 
 const world = ecs.createWorld(registry);
 const e = world.createEntity();
-world.addComponent(e, "Player");        // no data argument needed
+world.addComponent(e, "Player");                  // no data needed
 world.addComponent(e, "Position", { x: 0, y: 0 });
 ```
 
-### In-place mutation with dirty tracking
+### In-Place Mutation
 
-`getMut` returns the component reference and marks it as updated for change tracking:
+Need to tweak a component without replacing it? `getMut` gives you a direct reference *and* automatically flags it as changed for tracking:
 
 ```ts
 const pos = world.getMut(entity, "Position");
 if (pos) {
-  pos.x += 10; // mutate in place, change tracking records the update
+  pos.x += 10; // mutate in place, change tracking picks it up
 }
 ```
 
-### Change tracking
+### Change Tracking
 
-Each frame tracks which entities had components added, removed, or updated:
+Every frame, the world knows exactly which entities had components added, removed, or updated:
 
 ```ts
 scheduler.addSystem((world) => {
   for (const entity of world.getAdded("Position")) {
-    // entity just received a Position component this frame
+    // just got a Position this frame
   }
   for (const entity of world.getUpdated("Position")) {
-    // entity's Position was modified this frame
+    // Position was modified this frame
   }
   for (const entity of world.getRemoved("Position")) {
-    // entity's Position was removed this frame
+    // Position was taken away this frame
   }
 });
 ```
 
-### Cached queries
+### Cached Queries
 
-For hot-path iteration, cached queries maintain a live set of matched entities incrementally:
+For performance-critical loops, cached queries maintain a live set of matching entities that stays up-to-date automatically:
 
 ```ts
-const movers = world.createQuery(["Transform", "Velocity"]);
+const movers = world.createQuery(["Position", "Velocity"]);
 
 scheduler.addSystem(() => {
   for (const { entity, components } of movers) {
-    // iterates only entities matching the query
+    // only iterates matching entities — no filtering overhead
   }
-  console.log(movers.size); // number of matched entities
+  console.log(movers.size); // how many match right now
 });
 ```
 
-### System phases
+### System Phases
 
-The scheduler supports named execution phases for deterministic ordering:
+Group systems into named phases so they always run in a predictable order:
 
 ```ts
 const scheduler = new ecs.Scheduler(world, ["input", "update", "render"]);
+
 scheduler.addSystem("input", handleInput);
 scheduler.addSystem("update", physics);
 scheduler.addSystem("update", ai);
 scheduler.addSystem("render", draw);
 
-scheduler.disableSystem(ai);  // skip a system
-scheduler.enableSystem(ai);   // re-enable it
-scheduler.removeSystem(draw); // remove entirely
+scheduler.disableSystem(ai);  // temporarily skip
+scheduler.enableSystem(ai);   // bring it back
+scheduler.removeSystem(draw); // gone for good
 ```
 
-### Command buffer (deferred mutations)
+### Command Buffer
 
-Each system receives a `commands` argument for safe mutations during iteration:
+Destroying an entity while you're iterating over a query is a recipe for bugs. The `commands` argument defers those mutations until the system finishes:
 
 ```ts
 scheduler.addSystem((world, dt, commands) => {
   for (const { entity, components } of world.query(["Health"])) {
     if (components.Health.hp <= 0) {
-      commands.destroyEntity(entity);  // deferred until after system returns
+      commands.destroyEntity(entity); // happens after this system returns
     }
   }
-  const spawned = commands.createEntity(); // immediate, returns usable ID
+
+  // Creating entities is immediate — you get a usable ID right away
+  const spawned = commands.createEntity();
   commands.addComponent(spawned, "Position", { x: 0, y: 0 });
 });
 ```
 
-### Resources (singletons)
+### Resources
 
-Resources are typed singleton values, not attached to entities:
+Resources are world-level singletons — typed values that aren't attached to any entity:
 
 ```ts
 const resources = {
@@ -213,14 +270,15 @@ const resources = {
 };
 
 const world = ecs.createWorld(registry, { resources });
+
 world.setResource("Time", { elapsed: 0 });
-world.getResource("Time"); // { elapsed: 0 }
-world.hasResource("Config"); // false
+world.getResource("Time");    // { elapsed: 0 }
+world.hasResource("Config");  // false
 ```
 
 ### Events
 
-Frame-buffered typed events decouple producer and consumer systems:
+Frame-buffered typed events let systems talk to each other without tight coupling:
 
 ```ts
 const events = {
@@ -229,12 +287,12 @@ const events = {
 
 const world = ecs.createWorld(registry, { resources: {}, events });
 
-// producer system
+// One system fires the event...
 scheduler.addSystem((world) => {
   world.emit("Collision", { a: entityA, b: entityB });
 });
 
-// consumer system (runs later in the same frame)
+// ...another system reacts to it
 scheduler.addSystem((world) => {
   for (const event of world.read("Collision")) {
     console.log("collision between", event.a, event.b);
@@ -242,11 +300,11 @@ scheduler.addSystem((world) => {
 });
 ```
 
-Events accumulate during a frame and are cleared at the start of the next frame.
+Events pile up during a frame and get cleared at the start of the next one.
 
-### Entity hierarchy
+### Entity Hierarchy
 
-Parent-child relationships with cascade destroy:
+Set up parent-child relationships. When a parent is destroyed, its children go with it:
 
 ```ts
 const hierarchy = new ecs.Hierarchy(world);
@@ -255,40 +313,46 @@ const parent = world.createEntity();
 const child = world.createEntity();
 hierarchy.setParent(child, parent);
 
-hierarchy.getParent(child);       // parent
-hierarchy.getChildren(parent);    // [child]
+hierarchy.getParent(child);              // parent
+hierarchy.getChildren(parent);           // [child]
 hierarchy.isDescendantOf(child, parent); // true
 
-world.destroyEntity(parent); // also destroys child
+world.destroyEntity(parent); // child is destroyed too
 ```
 
-### Batch entity creation
+### Batch Spawning
 
-`spawn` creates multiple entities with components in one call:
+Need a hundred entities with similar components? `spawn` handles it in one call. Pass a function for per-entity values, or a plain object to share the same value:
 
 ```ts
 const entities = world.spawn(100, {
-  Position: (i) => ({ x: i * 10, y: 0 }),
-  Velocity: { x: 1, y: 0 },  // static value shared by all
+  Position: (i) => ({ x: i * 10, y: 0 }), // unique per entity
+  Velocity: { x: 1, y: 0 },               // shared by all
 });
 ```
 
-### Debug stats
+### Debug Stats
+
+Peek at what's going on in your world:
 
 ```ts
-world.entityCount;              // number of alive entities
-world.componentCount("Position"); // entities with Position
-world.stats();                  // { entities: N, components: { Position: N, ... } }
-world.clear();                  // destroy all entities and reset
+world.entityCount;                // alive entities
+world.componentCount("Position"); // how many have Position
+world.stats();                    // full breakdown
+world.clear();                    // wipe everything and start over
 ```
 
-### Runtime/JSON bridge
+### Runtime/JSON Bridge
+
+Save and load worlds as JSON:
 
 ```ts
+// Load from JSON
 const { world: runtimeWorld, issues } = ecs.worldFromJson(registry, worldJson, {
   allowUnknownComponents: true,
 });
 
+// Save to JSON
 const serialized = ecs.worldToJson(registry, runtimeWorld, {
   stripUnknownComponents: false,
 });
