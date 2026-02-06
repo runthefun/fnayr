@@ -292,13 +292,14 @@ describe("Tag components", () => {
     expect(world.getRemoved("Visible")).toContain(entity);
   });
 
-  it("throws when addComponent is called without data for non-tag component", () => {
+  it("addComponent without data for non-tag component uses schema defaults", () => {
     const world = createWorld(tagRegistry);
     const entity = world.createEntity();
 
-    expect(() =>
-      world.addComponent(entity, "Transform")
-    ).toThrow(/required/i);
+    world.addComponent(entity, "Transform");
+
+    expect(world.hasComponent(entity, "Transform")).toBe(true);
+    expect(world.getComponent(entity, "Transform")).toEqual({ x: 0 });
   });
 });
 
@@ -346,6 +347,67 @@ describe("forEachEntity", () => {
     world.forEachEntity((entity) => collected.push(entity));
 
     expect(collected).toHaveLength(0);
+  });
+});
+
+describe("Component defaults at addition time", () => {
+  const registry = {
+    Position: s.object({ x: s.number(), y: s.number() }),
+    Label: s.object({ name: s.string() }),
+    Visible: s.tag(),
+  };
+
+  it("addComponent without data uses schema defaults", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+
+    world.addComponent(entity, "Position");
+
+    expect(world.hasComponent(entity, "Position")).toBe(true);
+    expect(world.getComponent(entity, "Position")).toEqual({ x: 0, y: 0 });
+  });
+
+  it("addComponent with data uses provided data", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+
+    world.addComponent(entity, "Position", { x: 5, y: 10 });
+
+    expect(world.getComponent(entity, "Position")).toEqual({ x: 5, y: 10 });
+  });
+
+  it("default values are independent per call (no shared references)", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+
+    world.addComponent(e1, "Position");
+    world.addComponent(e2, "Position");
+
+    const c1 = world.getComponent(e1, "Position")!;
+    const c2 = world.getComponent(e2, "Position")!;
+
+    // Mutating one should not affect the other
+    c1.x = 99;
+    expect(c2.x).toBe(0);
+  });
+
+  it("string schema defaults to empty string", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+
+    world.addComponent(entity, "Label");
+
+    expect(world.getComponent(entity, "Label")).toEqual({ name: "" });
+  });
+
+  it("tag components still work without data", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+
+    world.addComponent(entity, "Visible");
+
+    expect(world.getComponent(entity, "Visible")).toBe(true);
   });
 });
 

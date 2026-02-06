@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { EntityManager } from "./entity";
 import { SparseSetStore } from "./storage";
+import { getDefault } from "../schema";
 
 const hasOwn = (value: object, key: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
@@ -94,7 +95,7 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
     if (schema.type === "tag") {
       value = true;
     } else if (data === undefined) {
-      throw new Error(`Component data is required for non-tag component "${type}"`);
+      value = getDefault(schema);
     }
     const store = this.getStore(type);
     const existed = store.has(entity);
