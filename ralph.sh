@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MAX_STEPS="${1:?Usage: ./run-ecs-refactor.sh <max_steps>}"
 PRD="PRD.json"
 PROGRESS="progress.md"
 STEP=0
+
+# default max steps to the number of remaining tasks
+if [ -n "${1:-}" ]; then
+  MAX_STEPS="$1"
+else
+  MAX_STEPS=$(jq '[.tasks[] | select(.done == false)] | length' "$PRD")
+fi
 
 # init progress file if missing
 if [ ! -f "$PROGRESS" ]; then

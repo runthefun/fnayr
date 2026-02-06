@@ -19,6 +19,7 @@ pnpm test:run     # Run test suite (vitest run)
 
 ## Architecture
 
+- **Engine architecture**: See [engine-architecture.md](engine-architecture.md) for detailed documentation of the schema system and ECS runtime.
 - **Entry flow**: `index.html` → `src/main.tsx` (mounts React root with StrictMode) → `src/App.tsx`
 - **Build**: Vite with `@vitejs/plugin-react` (automatic JSX transform)
 - **TypeScript**: Strict mode, ES2020 target, bundler module resolution, no emit (type-check only)
