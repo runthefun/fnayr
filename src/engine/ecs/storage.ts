@@ -1,12 +1,14 @@
+import { getEntityIndex } from "./entity";
 import type { ComponentStore, EntityId } from "./types";
 
 /**
  * Sparse-set component store with dense iteration order.
+ * Uses a flat array indexed by entity index for O(1) lookup without hash overhead.
  */
 export class SparseSetStore<T> implements ComponentStore<T> {
   private readonly denseEntities: EntityId[] = [];
   private readonly denseValues: T[] = [];
-  private readonly sparse = new Map<EntityId, number>();
+  private readonly sparse: (number | undefined)[] = [];
 
   /**
    * Returns the number of stored components.
@@ -19,52 +21,60 @@ export class SparseSetStore<T> implements ComponentStore<T> {
    * Returns true if the entity has a stored component.
    */
   has(entity: EntityId): boolean {
-    return this.sparse.has(entity);
+    const idx = getEntityIndex(entity);
+    const densePos = this.sparse[idx];
+    return densePos !== undefined && this.denseEntities[densePos] === entity;
   }
 
   /**
    * Returns the component for the entity, if present.
    */
   get(entity: EntityId): T | undefined {
-    const index = this.sparse.get(entity);
-    return index === undefined ? undefined : this.denseValues[index];
+    const idx = getEntityIndex(entity);
+    const densePos = this.sparse[idx];
+    if (densePos === undefined || this.denseEntities[densePos] !== entity) {
+      return undefined;
+    }
+    return this.denseValues[densePos];
   }
 
   /**
    * Adds or replaces a component for the entity.
    */
   set(entity: EntityId, value: T): void {
-    const index = this.sparse.get(entity);
-    if (index === undefined) {
-      const nextIndex = this.denseEntities.length;
-      this.denseEntities.push(entity);
-      this.denseValues.push(value);
-      this.sparse.set(entity, nextIndex);
+    const idx = getEntityIndex(entity);
+    const densePos = this.sparse[idx];
+    if (densePos !== undefined && this.denseEntities[densePos] === entity) {
+      this.denseValues[densePos] = value;
       return;
     }
-    this.denseValues[index] = value;
+    const nextIndex = this.denseEntities.length;
+    this.denseEntities.push(entity);
+    this.denseValues.push(value);
+    this.sparse[idx] = nextIndex;
   }
 
   /**
    * Removes the component for the entity.
    */
   remove(entity: EntityId): boolean {
-    const index = this.sparse.get(entity);
-    if (index === undefined) {
+    const idx = getEntityIndex(entity);
+    const densePos = this.sparse[idx];
+    if (densePos === undefined || this.denseEntities[densePos] !== entity) {
       return false;
     }
 
     const lastIndex = this.denseEntities.length - 1;
     const lastEntity = this.denseEntities[lastIndex];
-    if (index !== lastIndex) {
-      this.denseEntities[index] = lastEntity;
-      this.denseValues[index] = this.denseValues[lastIndex];
-      this.sparse.set(lastEntity, index);
+    if (densePos !== lastIndex) {
+      this.denseEntities[densePos] = lastEntity;
+      this.denseValues[densePos] = this.denseValues[lastIndex];
+      this.sparse[getEntityIndex(lastEntity)] = densePos;
     }
 
     this.denseEntities.pop();
     this.denseValues.pop();
-    this.sparse.delete(entity);
+    this.sparse[idx] = undefined;
     return true;
   }
 
@@ -106,6 +116,6 @@ export class SparseSetStore<T> implements ComponentStore<T> {
   clear(): void {
     this.denseEntities.length = 0;
     this.denseValues.length = 0;
-    this.sparse.clear();
+    this.sparse.length = 0;
   }
 }
