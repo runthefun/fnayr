@@ -48,6 +48,27 @@ describe("EcsWorld query", () => {
     expect(results[0].entity).toBe(visible);
   });
 
+  it("does not skip entities when one is destroyed during iteration", () => {
+    const world = createWorld(registry);
+    const a = world.createEntity();
+    const b = world.createEntity();
+    const c = world.createEntity();
+
+    world.addComponent(a, "Transform", { x: 1 });
+    world.addComponent(b, "Transform", { x: 2 });
+    world.addComponent(c, "Transform", { x: 3 });
+
+    const visited: number[] = [];
+    for (const row of world.query(["Transform"])) {
+      visited.push(row.entity);
+      if (row.entity === a) {
+        world.destroyEntity(a);
+      }
+    }
+
+    expect(visited.sort()).toEqual([a, b, c].sort());
+  });
+
   it("reflects entity lifecycle changes across iterations", () => {
     const world = createWorld(registry);
     const query = world.query(["Transform"]);

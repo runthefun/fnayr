@@ -206,7 +206,7 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
         }
 
         const baseStore = includeStores[baseStoreIndex]!;
-        const baseEntities = baseStore.entities();
+        const baseEntities = baseStore.entities().slice();
 
         for (const entity of baseEntities) {
           if (!baseStore.has(entity)) {
