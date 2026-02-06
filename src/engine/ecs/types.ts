@@ -137,9 +137,11 @@ export interface World<R extends ComponentRegistry> {
   /** Clears all tracked component changes. */
   flushChanges(): void;
   /** Returns entities that added the component during the current frame. */
-  getAdded<K extends ComponentType<R>>(type: K): EntityId[];
+  getAdded<K extends ComponentType<R>>(type: K): ReadonlySet<EntityId>;
   /** Returns entities that removed the component during the current frame. */
-  getRemoved<K extends ComponentType<R>>(type: K): EntityId[];
+  getRemoved<K extends ComponentType<R>>(type: K): ReadonlySet<EntityId>;
   /** Returns entities that updated the component during the current frame. */
-  getUpdated<K extends ComponentType<R>>(type: K): EntityId[];
+  getUpdated<K extends ComponentType<R>>(type: K): ReadonlySet<EntityId>;
+  /** Iterates all alive entities via callback (no generator allocation). */
+  forEachEntity(callback: (entity: EntityId) => void): void;
 }

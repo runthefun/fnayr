@@ -309,25 +309,32 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
   /**
    * Returns entities that added the component during the current frame.
    */
-  getAdded<K extends ComponentType<R>>(type: K): number[] {
+  getAdded<K extends ComponentType<R>>(type: K): ReadonlySet<number> {
     this.assertRegistered(type);
-    return Array.from(this.getChangeSet(type).added);
+    return this.getChangeSet(type).added;
   }
 
   /**
    * Returns entities that removed the component during the current frame.
    */
-  getRemoved<K extends ComponentType<R>>(type: K): number[] {
+  getRemoved<K extends ComponentType<R>>(type: K): ReadonlySet<number> {
     this.assertRegistered(type);
-    return Array.from(this.getChangeSet(type).removed);
+    return this.getChangeSet(type).removed;
   }
 
   /**
    * Returns entities that updated the component during the current frame.
    */
-  getUpdated<K extends ComponentType<R>>(type: K): number[] {
+  getUpdated<K extends ComponentType<R>>(type: K): ReadonlySet<number> {
     this.assertRegistered(type);
-    return Array.from(this.getChangeSet(type).updated);
+    return this.getChangeSet(type).updated;
+  }
+
+  /**
+   * Iterates all alive entities via callback (no generator allocation).
+   */
+  forEachEntity(callback: (entity: number) => void): void {
+    this.entityManager.forEachEntity(callback);
   }
 
   /**

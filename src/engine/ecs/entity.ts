@@ -177,4 +177,15 @@ export class EntityManager {
       }
     }
   }
+
+  /**
+   * Iterates all alive entity ids via callback (no generator allocation).
+   */
+  forEachEntity(callback: (entity: EntityId) => void): void {
+    for (let index = 0; index < this.alive.length; index += 1) {
+      if (this.alive[index]) {
+        callback(makeEntityId(index, this.generations[index], this.capacity));
+      }
+    }
+  }
 }

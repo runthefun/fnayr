@@ -67,4 +67,20 @@ describe("EntityManager", () => {
       expect(getEntityGeneration(ids[i])).toBe(0);
     }
   });
+
+  it("forEachEntity iterates alive entities without generator allocation", () => {
+    const manager = new EntityManager();
+    const e1 = manager.create();
+    const e2 = manager.create();
+    const e3 = manager.create();
+    manager.destroy(e2);
+
+    const collected: number[] = [];
+    manager.forEachEntity((entity) => collected.push(entity));
+
+    expect(collected).toHaveLength(2);
+    expect(collected).toContain(e1);
+    expect(collected).not.toContain(e2);
+    expect(collected).toContain(e3);
+  });
 });

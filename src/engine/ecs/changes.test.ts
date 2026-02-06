@@ -15,17 +15,17 @@ describe("EcsWorld change tracking", () => {
     world.beginFrame();
     world.addComponent(entity, "Transform", { x: 1 });
 
-    expect(world.getAdded("Transform")).toEqual([entity]);
-    expect(world.getRemoved("Transform")).toEqual([]);
+    expect(world.getAdded("Transform")).toEqual(new Set([entity]));
+    expect(world.getRemoved("Transform")).toEqual(new Set());
 
     world.endFrame();
 
-    expect(world.getAdded("Transform")).toEqual([]);
+    expect(world.getAdded("Transform")).toEqual(new Set());
 
     world.beginFrame();
     world.removeComponent(entity, "Transform");
 
-    expect(world.getRemoved("Transform")).toEqual([entity]);
+    expect(world.getRemoved("Transform")).toEqual(new Set([entity]));
   });
 
   it("tracks updated component data", () => {
@@ -36,7 +36,7 @@ describe("EcsWorld change tracking", () => {
     world.beginFrame();
     world.addComponent(entity, "Transform", { x: 3 });
 
-    expect(world.getUpdated("Transform")).toEqual([entity]);
+    expect(world.getUpdated("Transform")).toEqual(new Set([entity]));
   });
 
   it("clears changes between frames", () => {
@@ -45,12 +45,12 @@ describe("EcsWorld change tracking", () => {
 
     world.beginFrame();
     world.addComponent(entity, "Name", { label: "Hero" });
-    expect(world.getAdded("Name")).toEqual([entity]);
+    expect(world.getAdded("Name")).toEqual(new Set([entity]));
 
     world.endFrame();
 
-    expect(world.getAdded("Name")).toEqual([]);
-    expect(world.getRemoved("Name")).toEqual([]);
-    expect(world.getUpdated("Name")).toEqual([]);
+    expect(world.getAdded("Name")).toEqual(new Set());
+    expect(world.getRemoved("Name")).toEqual(new Set());
+    expect(world.getUpdated("Name")).toEqual(new Set());
   });
 });

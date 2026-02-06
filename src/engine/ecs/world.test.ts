@@ -301,3 +301,103 @@ describe("Tag components", () => {
     ).toThrow(/required/i);
   });
 });
+
+describe("forEachEntity", () => {
+  const registry = {
+    Transform: s.object({ x: s.number() }),
+  };
+
+  it("iterates all alive entities via callback", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+    const e3 = world.createEntity();
+
+    const collected: number[] = [];
+    world.forEachEntity((entity) => collected.push(entity));
+
+    expect(collected).toHaveLength(3);
+    expect(collected).toContain(e1);
+    expect(collected).toContain(e2);
+    expect(collected).toContain(e3);
+  });
+
+  it("skips destroyed entities", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+    const e3 = world.createEntity();
+
+    world.destroyEntity(e2);
+
+    const collected: number[] = [];
+    world.forEachEntity((entity) => collected.push(entity));
+
+    expect(collected).toHaveLength(2);
+    expect(collected).toContain(e1);
+    expect(collected).not.toContain(e2);
+    expect(collected).toContain(e3);
+  });
+
+  it("collects no entities on an empty world", () => {
+    const world = createWorld(registry);
+
+    const collected: number[] = [];
+    world.forEachEntity((entity) => collected.push(entity));
+
+    expect(collected).toHaveLength(0);
+  });
+});
+
+describe("change tracking returns ReadonlySet", () => {
+  const registry = {
+    Transform: s.object({ x: s.number() }),
+  };
+
+  it("getAdded returns a Set containing the added entity", () => {
+    const world = createWorld(registry);
+    world.beginFrame();
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 1 });
+
+    const added = world.getAdded("Transform");
+    expect(added).toBeInstanceOf(Set);
+    expect(added.has(entity)).toBe(true);
+    expect(added.size).toBe(1);
+  });
+
+  it("getRemoved returns a Set containing the removed entity", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 1 });
+    world.beginFrame();
+    world.removeComponent(entity, "Transform");
+
+    const removed = world.getRemoved("Transform");
+    expect(removed).toBeInstanceOf(Set);
+    expect(removed.has(entity)).toBe(true);
+    expect(removed.size).toBe(1);
+  });
+
+  it("getUpdated returns a Set containing the updated entity", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 1 });
+    world.beginFrame();
+    world.addComponent(entity, "Transform", { x: 2 });
+
+    const updated = world.getUpdated("Transform");
+    expect(updated).toBeInstanceOf(Set);
+    expect(updated.has(entity)).toBe(true);
+    expect(updated.size).toBe(1);
+  });
+
+  it("empty change sets are empty Sets", () => {
+    const world = createWorld(registry);
+    world.beginFrame();
+
+    const added = world.getAdded("Transform");
+    expect(added).toBeInstanceOf(Set);
+    expect(added.size).toBe(0);
+  });
+});
