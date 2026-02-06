@@ -1,0 +1,393 @@
+{
+  "project": "fnayr-ecs-refactor",
+  "context": {
+    "summary": "Refactor the ECS module (src/engine/ecs/) to serve as the runtime foundation for a 3D web game engine built on Three.js WebGPU renderer with TSL (Three.js Shading Language). The current ECS has solid type safety, schema-based component definitions, change tracking, and JSON serialization, but has correctness bugs, performance issues, and missing features required for a real-time 3D engine.",
+    "codebase": "TypeScript project using Vite, React, pnpm. The ECS lives in src/engine/ecs/ with files: types.ts (interfaces), entity.ts (EntityManager with generation-based IDs), storage.ts (SparseSetStore), world.ts (EcsWorld implementation), systems.ts (Scheduler), bridge.ts (JSON serialization). Supporting modules: src/engine/schema.ts (schema builder + defaults), src/engine/validate.ts, src/engine/materialize.ts, src/engine/codec.ts.",
+    "key_patterns": [
+      "Component registry is a Record<string, SchemaLike> — generics propagate types to queries",
+      "Entity IDs encode generation * 1_000_000 + index for stale-reference safety",
+      "SparseSetStore uses dense arrays for iteration + Map<EntityId, number> for sparse lookup",
+      "Change tracking per component type: added/removed/updated Sets cleared on beginFrame/endFrame",
+      "World interface in types.ts, implementation in EcsWorld class in world.ts",
+      "Scheduler is a flat array of (world, dt) => void system functions"
+    ]
+  },
+  "execution_workflow": {
+    "description": "Each task is executed sequentially by Claude in a bash loop. For each task, Claude must: (1) read the relevant files, (2) implement the changes described, (3) write or update tests, (4) run typecheck and tests to validate. A task is only marked done when both typecheck and all tests pass.",
+    "validation_commands": {
+      "typecheck": "pnpm typecheck",
+      "tests": "pnpm test:run"
+    },
+    "rules": [
+      "Never skip validation — both typecheck and tests must pass before marking done",
+      "If an existing test breaks, determine if the test expectation needs updating (because behavior intentionally changed) or if the implementation is wrong",
+      "Each task must be self-contained: do not leave partial changes that break the build",
+      "Preserve all existing public API signatures unless the task explicitly says to change them",
+      "Add tests for every new public method or behavior change",
+      "Keep the ecs/index.ts barrel export up to date when adding new files",
+      "After a task passes validation confidently (typecheck + tests), commit the changes with a concise message (e.g., 'ecs: fix destroyEntity listener ordering') and mark done"
+    ]
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Fix destroyEntity listener ordering",
+      "priority": "P0",
+      "done": true,
+      "description": "In src/engine/ecs/world.ts, the destroyEntity method currently: (1) removes all components from stores, (2) marks the entity dead in EntityManager, (3) fires destroy listeners. This means listeners receive a stale entity ID with no accessible components — they can't do cleanup that requires reading component data (e.g., disposing Three.js objects based on a MeshComponent). Fix the ordering so listeners fire FIRST while the entity is still alive and components are still accessible, THEN remove components from stores and record removals in change tracking, THEN mark dead in entity manager. Update any existing tests in ecs/world.test.ts that assert on the current ordering. Add a new test that verifies a destroy listener can call world.getComponent() and world.hasComponent() on the entity being destroyed and get valid results.",
+      "files": ["src/engine/ecs/world.ts", "src/engine/ecs/world.test.ts"],
+      "success_criteria": [
+        "destroyEntity fires listeners before removing components and before marking entity dead",
+        "A destroy listener can call getComponent/hasComponent on the entity and get valid results",
+        "Change tracking still records removals correctly for destroyed entity components",
+        "All existing tests pass (updated if they asserted on old ordering)",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Query iteration safety during mutation",
+      "priority": "P0",
+      "done": false,
+      "description": "In src/engine/ecs/world.ts, the query() method's iterator uses baseStore.entities() which returns the LIVE backing array of the SparseSetStore. If a system destroys an entity or removes a component during iteration, the sparse set's swap-remove can skip entities (the last element is moved into the removed slot, and the for-of loop advances past it). Fix by snapshotting the base entity array at the start of iteration: replace `const baseEntities = baseStore.entities()` with `const baseEntities = baseStore.entities().slice()`. Also snapshot the entity list in the include-length-0 branch (line 173: `Array.from(world.entities())` is already a copy, so that branch is safe). Add a test that proves correctness: create 3 entities with a component, iterate a query, destroy the first entity during iteration, and verify all 3 entities were visited (or at minimum, no entity was silently skipped). The existing `if (!baseStore.has(entity))` guard at line 211 should remain as a secondary safety check for entities that were destroyed during iteration.",
+      "files": ["src/engine/ecs/world.ts", "src/engine/ecs/query.test.ts"],
+      "success_criteria": [
+        "Query iterator snapshots the base entity array so swap-remove during iteration cannot skip entities",
+        "Test proves that destroying an entity during query iteration does not skip other entities",
+        "The has() guard remains as a secondary check for destroyed-during-iteration entities",
+        "All existing query tests still pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 3,
+      "title": "EntityManager.reserve() free-list performance",
+      "priority": "P2",
+      "done": false,
+      "description": "In src/engine/ecs/entity.ts, the reserve() method uses this.free.indexOf(index) (O(n) scan) and this.free.splice(freeIndex, 1) (O(n) shift) to remove an index from the free list. Loading a saved world with 10K entities means O(n^2) total cost. Fix by changing the free list from an array to a Set<number>. The Set gives O(1) has/delete for reserve(). For create(), which currently does this.free.pop() to grab a reusable index, use Set.values().next().value to grab an arbitrary element, then delete it. Alternatively, maintain both a Set (for reserve lookups) and push the same values — but the simplest approach is a Set-only free list. Update the destroy() method which currently does this.free.push(index) to use Set.add(). Make sure all existing entity.test.ts tests pass. Add a test that reserves 100 entities by ID and verifies they're all alive and have correct IDs.",
+      "files": ["src/engine/ecs/entity.ts", "src/engine/ecs/entity.test.ts"],
+      "success_criteria": [
+        "Free list is a Set<number> instead of number[]",
+        "reserve() uses Set.delete() instead of indexOf + splice — O(1) instead of O(n)",
+        "create() grabs a reusable index from the Set in O(1)",
+        "destroy() adds to the Set",
+        "All existing entity tests pass",
+        "New test verifies bulk reserve of 100 entities works correctly",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 4,
+      "title": "In-place component mutation with dirty tracking (getMut)",
+      "priority": "P0",
+      "done": false,
+      "description": "Add a getMut<K>(entity, type) method to the World interface and EcsWorld class. getMut returns the direct reference to the stored component object (same as getComponent) but ALSO marks the component as updated in the change tracker by calling recordUpdated(type, entity). This lets systems mutate component data in-place without allocating a new object. If the entity is not alive or doesn't have the component, return undefined (same as getComponent). getMut must NOT record an update if the component was added in the current frame (same logic as recordUpdated — if it's in the added set, it stays as added, not updated). Add to: (1) World interface in types.ts, (2) EcsWorld class in world.ts. Add tests: (a) getMut returns the same reference as getComponent, (b) mutating the returned object is visible via getComponent, (c) getMut marks the component as updated in change tracking, (d) getMut on a component added in the same frame does not double-record as both added and updated, (e) getMut returns undefined for dead entities and missing components.",
+      "files": ["src/engine/ecs/types.ts", "src/engine/ecs/world.ts", "src/engine/ecs/world.test.ts"],
+      "success_criteria": [
+        "World interface has getMut<K>(entity, type): ComponentData<R, K> | undefined",
+        "EcsWorld.getMut returns the stored reference and calls recordUpdated",
+        "Mutating the reference is visible via getComponent (proves same reference)",
+        "Change tracking shows the component as updated after getMut",
+        "getMut on a same-frame-added component keeps it as 'added' only, not 'updated'",
+        "getMut returns undefined for dead entities and missing components without throwing",
+        "All existing tests pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Tag / marker components",
+      "priority": "P1",
+      "done": false,
+      "description": "Add a tag schema type for zero-data marker components. Changes needed across multiple files:\n\n1. src/engine/schema.ts: Add TagSchema type = SchemaBase<'tag'>. Add s.tag() builder function that returns { type: 'tag' }. Update the Schema union type to include TagSchema. Update getDefault to return true for tag schemas. Update SchemaValue to map TagSchema to the literal type `true`.\n\n2. src/engine/validate.ts: Add validation case for 'tag' type — accepts true, undefined, or any value (tags are presence-only so validation is lenient). Or simply: value must be exactly `true`.\n\n3. src/engine/materialize.ts: Add materialization case for 'tag' — returns true.\n\n4. src/engine/ecs/types.ts: Update ComponentData so that when the schema is a TagSchema, the data type is `true`. Make the data parameter of addComponent optional when the component is a tag (this is tricky with generics — the simplest approach is to make data always optional with `data?: ComponentData<R, K>` and handle undefined in the implementation).\n\n5. src/engine/ecs/world.ts: In addComponent, if the registry schema for the type has type === 'tag', store `true` as the value regardless of what data was passed. If data is undefined and schema type is 'tag', store true. If data is undefined and schema type is NOT tag, throw an error (or use defaults — but that's a separate task).\n\nAdd tests: registry with tag components, addComponent without data arg, hasComponent returns true, getComponent returns true, query includes tag entities, tag components serialize/deserialize through the bridge.",
+      "files": [
+        "src/engine/schema.ts",
+        "src/engine/validate.ts",
+        "src/engine/materialize.ts",
+        "src/engine/ecs/types.ts",
+        "src/engine/ecs/world.ts",
+        "src/engine/ecs/world.test.ts"
+      ],
+      "success_criteria": [
+        "s.tag() returns a TagSchema with type 'tag'",
+        "SchemaValue<TagSchema> is `true`",
+        "getDefault for tag schema returns true",
+        "addComponent with a tag component works without a data argument",
+        "hasComponent returns true for tag components",
+        "getComponent returns true for tag components",
+        "Tag components participate in queries (include and exclude)",
+        "Validation accepts true for tag schemas",
+        "Materialization returns true for tag schemas",
+        "All existing tests pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 6,
+      "title": "SparseSetStore: replace Map with flat array",
+      "priority": "P2",
+      "done": false,
+      "description": "In src/engine/ecs/storage.ts, replace the Map<EntityId, number> sparse index with a flat array indexed by entity index (extracted via getEntityIndex from entity.ts). This gives true O(1) lookup without hash overhead.\n\nChanges to SparseSetStore:\n- Import getEntityIndex from ./entity\n- Replace `private readonly sparse = new Map<EntityId, number>()` with `private readonly sparse: (number | undefined)[] = []`\n- has(entity): extract index via getEntityIndex(entity), check sparse[index] !== undefined AND denseEntities[sparse[index]] === entity (the second check prevents stale generation matches)\n- get(entity): same pattern — extract index, check sparse, verify entity match in dense\n- set(entity): extract index, check sparse[index] and denseEntities match for existing, otherwise append to dense and set sparse[index]\n- remove(entity): extract index, verify match, do swap-remove, update sparse for swapped entity, set sparse[index] = undefined (not delete)\n- clear(): reset sparse to empty array (or fill with undefined), clear dense arrays\n\nThe entity in the dense array is the FULL entity ID (with generation). The sparse array maps entity INDEX (without generation) to dense position. The generation check happens by comparing denseEntities[sparsePos] === entity.\n\nAll existing storage.test.ts tests must pass. Add a test that verifies stale entity IDs (same index, different generation) do not collide — i.e., store.set(entity_gen0, value), after gen0 is destroyed and gen1 is created at the same index, store.has(entity_gen0) returns false.",
+      "files": ["src/engine/ecs/storage.ts", "src/engine/ecs/storage.test.ts"],
+      "success_criteria": [
+        "SparseSetStore uses a flat array instead of Map for sparse index",
+        "has/get/set/remove use getEntityIndex to extract the array position",
+        "Stale generation IDs do not produce false positives (verified by dense entity check)",
+        "All existing storage tests pass",
+        "New test verifies generational safety (stale ID does not match)",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Reduce per-frame allocations",
+      "priority": "P2",
+      "done": false,
+      "description": "Reduce GC pressure in hot paths:\n\n1. Change tracking getters (world.ts): getAdded, getRemoved, getUpdated currently return Array.from(set) which allocates a new array each call. Change return type to ReadonlySet<number> and return the Set directly. Update the World interface in types.ts to match. Update all tests that use array matchers (toEqual([entity])) to use set-based assertions.\n\n2. Entity iteration (entity.ts): Add a forEachEntity(callback: (entity: EntityId) => void) method to EntityManager that iterates without generator allocation. Expose it on EcsWorld and the World interface as well.\n\n3. Query include/exclude copies (world.ts:153-154): The query method copies include and exclude arrays with [...include] and [...exclude]. These copies exist to prevent mutation of the originals. Keep these for correctness but note this is one-time per query creation, not per iteration — so it's acceptable.\n\nFocus on items 1 and 2. Do NOT change the query result object allocation yet (that requires more API design thought around reuse semantics).",
+      "files": [
+        "src/engine/ecs/types.ts",
+        "src/engine/ecs/world.ts",
+        "src/engine/ecs/entity.ts",
+        "src/engine/ecs/world.test.ts",
+        "src/engine/ecs/changes.test.ts"
+      ],
+      "success_criteria": [
+        "getAdded/getRemoved/getUpdated return ReadonlySet<number> instead of number[]",
+        "World interface updated to reflect ReadonlySet return types",
+        "EntityManager has forEachEntity callback method",
+        "EcsWorld and World interface expose forEachEntity",
+        "All existing tests updated to work with Set return types",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Component defaults at addition time",
+      "priority": "P3",
+      "done": false,
+      "description": "Make the data argument of addComponent optional. When omitted, use schema defaults via the existing getDefault function from schema.ts. When provided, use the value as-is (no deep merge — that's complex and can come later if needed).\n\nChanges:\n1. src/engine/ecs/types.ts: Make the data parameter optional in the World interface addComponent signature: `addComponent<K>(entity, type, data?: ComponentData<R, K>): void`\n2. src/engine/ecs/world.ts: In addComponent, if data is undefined, call getDefault(this.registry[type]) to produce the default value. Import getDefault from ../schema. For tag components (from task 5), getDefault already returns true, so this works naturally.\n3. Add tests: (a) addComponent without data uses schema defaults, (b) addComponent with data uses provided data (existing behavior preserved), (c) default values are independent per call (no shared reference issues — getDefault creates fresh objects each time).",
+      "files": ["src/engine/ecs/types.ts", "src/engine/ecs/world.ts", "src/engine/ecs/world.test.ts"],
+      "success_criteria": [
+        "addComponent can be called without a data argument",
+        "When data is omitted, component is initialized with schema defaults",
+        "When data is provided, existing behavior is preserved",
+        "Each default-created component is a fresh object (no shared references)",
+        "All existing tests pass (they all provide explicit data, so no change)",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Resources / singletons",
+      "priority": "P1",
+      "done": false,
+      "description": "Add a typed resource system to the world for global state that isn't per-entity (time, input, renderer config, etc.).\n\nDesign: The World and EcsWorld gain a second generic parameter for a resource registry. A resource registry is a Record<string, SchemaLike> (same shape as component registry). Resources are stored in a simple Map<string, unknown> on the world.\n\nChanges:\n1. src/engine/ecs/types.ts: Add ResourceRegistry type (= Record<string, SchemaLike>). Add to World interface: setResource<K>(type: K, data: ResourceData<K>): void, getResource<K>(type: K): ResourceData<K> | undefined, hasResource<K>(type: K): boolean. The World interface gains a second generic: World<R extends ComponentRegistry, Res extends ResourceRegistry = {}>. ResourceData<K> maps via SchemaValue like ComponentData does.\n\n2. src/engine/ecs/world.ts: Add a `private readonly resources = new Map<string, unknown>()` to EcsWorld. Add a second generic parameter and a resourceRegistry field. Implement setResource (validate key against resource registry, store value), getResource (lookup and cast), hasResource. The constructor takes an optional resourceRegistry parameter.\n\n3. createWorld gains an optional resources registry parameter.\n\nAdd tests: define a resource registry with Time and Config resources, set/get/has lifecycle, getResource returns undefined when not set, setResource overwrites previous value. Resources are NOT included in queries and NOT affected by beginFrame/endFrame.",
+      "files": [
+        "src/engine/ecs/types.ts",
+        "src/engine/ecs/world.ts",
+        "src/engine/ecs/world.test.ts"
+      ],
+      "success_criteria": [
+        "World interface has setResource/getResource/hasResource methods",
+        "EcsWorld stores resources in an internal Map, typed via ResourceRegistry generic",
+        "setResource validates the key against the resource registry",
+        "getResource returns the stored value with correct type, or undefined",
+        "hasResource returns boolean",
+        "Resources are not affected by beginFrame/endFrame/flushChanges",
+        "createWorld accepts an optional resource registry",
+        "All existing tests pass (backward compatible — second generic defaults to {})",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Entity count and debug stats",
+      "priority": "P3",
+      "done": false,
+      "description": "Expose read-only stats from the world for debugging and profiling.\n\nChanges:\n1. src/engine/ecs/types.ts: Add to World interface: `readonly entityCount: number` (alive entity count), `componentCount<K>(type: K): number` (entities with that component), `stats(): { entities: number; components: Record<string, number> }` (full snapshot).\n\n2. src/engine/ecs/world.ts: Implement entityCount as a getter that returns this.entityManager.size. Implement componentCount(type) that returns the store's size (or 0 if no store). Implement stats() that iterates registry keys and collects sizes.\n\nAdd tests: verify entityCount after creates/destroys, verify componentCount after add/remove, verify stats() returns correct shape.",
+      "files": ["src/engine/ecs/types.ts", "src/engine/ecs/world.ts", "src/engine/ecs/world.test.ts"],
+      "success_criteria": [
+        "world.entityCount returns the number of alive entities",
+        "world.componentCount('Transform') returns how many entities have that component",
+        "world.stats() returns a snapshot object with entity and per-component counts",
+        "Counts update correctly after create/destroy/addComponent/removeComponent",
+        "All existing tests pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 11,
+      "title": "World clear / reset",
+      "priority": "P3",
+      "done": false,
+      "description": "Add a world.clear() method for efficient full reset (scene transitions, level loading).\n\nChanges:\n1. src/engine/ecs/entity.ts: Add a reset() method to EntityManager that clears generations, alive, and free arrays, resets aliveCount to 0. This is a hard reset — all entity IDs become invalid.\n\n2. src/engine/ecs/world.ts: Add clear() to EcsWorld. Implementation: (1) fire destroy listeners for each alive entity (so Three.js cleanup can happen), (2) clear all stores via store.clear(), (3) reset entity manager via entityManager.reset(), (4) flush all changes. Add clear() to the World interface in types.ts.\n\nConsideration: firing destroy listeners per-entity during clear() is correct but could be slow for many entities. Accept this for now — a bulk 'worldCleared' event can be added later.\n\nAdd tests: create entities with components, call clear(), verify entityCount is 0, verify old entity IDs are no longer alive, verify stores are empty, verify new entities can be created after clear, verify destroy listeners were called for each entity during clear.",
+      "files": [
+        "src/engine/ecs/entity.ts",
+        "src/engine/ecs/world.ts",
+        "src/engine/ecs/types.ts",
+        "src/engine/ecs/world.test.ts"
+      ],
+      "success_criteria": [
+        "EntityManager has a reset() method that clears all state",
+        "world.clear() fires destroy listeners for each alive entity",
+        "world.clear() empties all component stores",
+        "world.clear() resets the entity manager",
+        "world.clear() flushes all change tracking",
+        "After clear, entityCount is 0 and old entity IDs are not alive",
+        "New entities can be created after clear",
+        "All existing tests pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 12,
+      "title": "System phases / stages",
+      "priority": "P1",
+      "done": false,
+      "description": "Rewrite the Scheduler to support named execution phases instead of a flat list.\n\nChanges to src/engine/ecs/systems.ts:\n- The Scheduler constructor takes an optional phases config: an array of phase names that defines execution order. If not provided, default to a single 'update' phase (backward compatible).\n- addSystem(system) with no phase adds to 'update' (backward compatible). addSystem(phase, system) adds to a specific phase.\n- runFrame(dt) iterates phases in declared order. For each phase, runs all systems in that phase in insertion order. Calls world.beginFrame() at the start of runFrame and world.endFrame() at the end.\n- Add removeSystem(system) to remove a system from whatever phase it's in.\n- Add enableSystem(system)/disableSystem(system) to toggle systems at runtime without removing them.\n\nKeep the System type signature as (world, dt) => void.\n\nUpdate src/engine/ecs/types.ts if any new types are needed.\n\nUpdate existing systems.test.ts tests — they use the old addSystem(system) API which should still work with the default 'update' phase. Add new tests: multiple phases execute in order, systems within a phase execute in insertion order, disabling a system skips it, removing a system removes it permanently.",
+      "files": [
+        "src/engine/ecs/systems.ts",
+        "src/engine/ecs/types.ts",
+        "src/engine/ecs/systems.test.ts"
+      ],
+      "success_criteria": [
+        "Scheduler accepts an optional phases array defining execution order",
+        "Default behavior (no phases) is backward compatible — single 'update' phase",
+        "addSystem(system) adds to 'update' phase (backward compatible)",
+        "addSystem(phase, system) adds to a named phase",
+        "runFrame executes phases in declared order, systems within phase in insertion order",
+        "runFrame calls world.beginFrame() at start and world.endFrame() at end",
+        "removeSystem removes a system",
+        "enableSystem/disableSystem toggles system execution",
+        "All existing systems tests pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Deferred command buffer",
+      "priority": "P2",
+      "done": false,
+      "description": "Add a Commands object for deferring world mutations during system execution. This is the proper solution for iteration safety — mutations are queued during a system's execution and applied after the system finishes.\n\nNew file src/engine/ecs/commands.ts:\n- Define Commands<R> interface with: createEntity() => EntityId (returns a reserved placeholder), destroyEntity(entity), addComponent(entity, type, data), removeComponent(entity, type).\n- Implement CommandBuffer<R> class that records commands into an array.\n- Add a flush(world) method that applies all recorded commands to the world in order, then clears the buffer.\n- createEntity in the command buffer should call world.createEntity() immediately (so the returned ID is valid for subsequent addComponent commands in the same system). Alternatively, defer creation too and return a placeholder — but immediate creation is simpler and more useful.\n\nUpdate src/engine/ecs/systems.ts:\n- Change the System type to (world, dt, commands) => void. Keep backward compatibility: if a system function has length <= 2, don't pass commands (or always pass it — TypeScript allows extra args).\n- The Scheduler creates a CommandBuffer before each system, passes it to the system, and flushes it after the system returns.\n\nUpdate ecs/index.ts to export the new module.\n\nAdd tests: commands.destroyEntity during query iteration doesn't affect iteration, commands.addComponent is visible after flush, multiple commands execute in order.",
+      "files": [
+        "src/engine/ecs/commands.ts",
+        "src/engine/ecs/systems.ts",
+        "src/engine/ecs/types.ts",
+        "src/engine/ecs/index.ts",
+        "src/engine/ecs/systems.test.ts"
+      ],
+      "success_criteria": [
+        "Commands interface defines createEntity/destroyEntity/addComponent/removeComponent",
+        "CommandBuffer records mutations and applies them on flush()",
+        "System type signature accepts commands as third argument",
+        "Scheduler creates and flushes a CommandBuffer per system",
+        "Existing systems that don't use commands still work (backward compatible)",
+        "Test: destroying via commands during query iteration doesn't affect iteration",
+        "Test: commands are applied in order after system completes",
+        "All existing tests pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Query caching",
+      "priority": "P2",
+      "done": false,
+      "description": "Add persistent query handles that avoid re-evaluating which entities match on every iteration.\n\nChanges:\n1. src/engine/ecs/types.ts: Add CachedQuery<R, Include> interface extending Query<R, Include> — same iteration contract but the world manages its lifecycle.\n\n2. src/engine/ecs/world.ts: Add createQuery<Include>(include, options?) method that returns a CachedQuery. Internally, a cached query stores its matched entity set (a Set<EntityId> or a dense array). When the cached query is iterated, it uses its cached entity set instead of scanning the smallest store. The world hooks into addComponent/removeComponent/destroyEntity to incrementally update all registered cached queries: when a component is added or removed, check if the entity now matches or unmatches each cached query and update accordingly.\n\nImplementation approach (start simple):\n- CachedQuery maintains a Set<EntityId> of matched entities\n- On addComponent(entity, type): for each cached query whose include set contains type, check if entity now has ALL required components and NONE of the excluded — if yes, add to cached set\n- On removeComponent(entity, type): for each cached query whose include set contains type, remove entity from cached set\n- On destroyEntity: remove entity from all cached query sets\n- The world keeps a list of registered cached queries\n\nThe existing query() method stays as-is (on-demand, no caching). createQuery() is the new cached alternative.\n\nAdd tests: cached query returns same results as on-demand query, cached query updates when components are added/removed, cached query updates when entities are destroyed, cached query respects exclude filters.",
+      "files": [
+        "src/engine/ecs/types.ts",
+        "src/engine/ecs/world.ts",
+        "src/engine/ecs/query.test.ts"
+      ],
+      "success_criteria": [
+        "createQuery returns a CachedQuery that is iterable like a regular query",
+        "CachedQuery produces the same results as query() for the same include/exclude",
+        "CachedQuery updates incrementally on addComponent/removeComponent/destroyEntity",
+        "CachedQuery respects exclude filters",
+        "Existing query() method is unchanged",
+        "All existing tests pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Entity relationships / parent-child hierarchy",
+      "priority": "P1",
+      "done": false,
+      "description": "Add entity hierarchy support for scene graph relationships (transform inheritance, subtree operations).\n\nNew file src/engine/ecs/hierarchy.ts:\n- Export a Hierarchy<R> class (or functions) that wraps a World<R> and manages parent-child relationships.\n- API: setParent(child, parent), getParent(child): EntityId | undefined, getChildren(parent): readonly EntityId[], removeParent(child), isDescendantOf(entity, ancestor): boolean.\n- Internal state: parentOf Map<EntityId, EntityId> and childrenOf Map<EntityId, EntityId[]>.\n- setParent validates both entities are alive, prevents cycles (entity cannot be its own ancestor), removes from previous parent's children list if re-parenting.\n- Register a destroy listener on the world: when an entity is destroyed, remove it from its parent's children list and recursively destroy all children (cascade delete). This is the standard game engine behavior — destroying a parent destroys the subtree. Provide an option or separate method to orphan children instead if needed.\n- getChildren returns a readonly view (or copy) to prevent external mutation.\n\nAlternative simpler approach: implement hierarchy as two built-in component types (Parent and Children) managed by helper functions. This integrates with the existing ECS query system (you can query for all entities with a Parent component). Choose whichever approach is cleaner.\n\nUpdate ecs/index.ts to export the hierarchy module.\n\nAdd tests: set parent, get parent/children, destroy parent cascades to children, reparenting updates old and new parent, cycle prevention, orphan roots have no parent.",
+      "files": [
+        "src/engine/ecs/hierarchy.ts",
+        "src/engine/ecs/hierarchy.test.ts",
+        "src/engine/ecs/index.ts"
+      ],
+      "success_criteria": [
+        "setParent establishes a parent-child relationship between two alive entities",
+        "getParent and getChildren return correct results",
+        "Destroying a parent cascades destruction to all descendants",
+        "Reparenting removes child from previous parent's children list",
+        "Cycle detection prevents an entity from being its own ancestor",
+        "removeParent orphans a child",
+        "All existing tests pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Events system",
+      "priority": "P3",
+      "done": false,
+      "description": "Add a simple frame-buffered event system for decoupling systems.\n\nNew file src/engine/ecs/events.ts:\n- Define EventRegistry type = Record<string, SchemaLike> (maps event name to payload schema).\n- Define EventBus<E extends EventRegistry> class with: emit<K>(type, data) — appends to the buffer for that event type. read<K>(type): readonly EventData<K>[] — returns all events of that type emitted so far this frame. flush() — clears all event buffers (called by world.beginFrame or world.endFrame).\n\nIntegrate with the world:\n- The World/EcsWorld gains an optional third generic for EventRegistry.\n- Add emit/read methods to the World interface that delegate to an internal EventBus.\n- Call eventBus.flush() inside beginFrame() (events from the previous frame are cleared at the start of the new frame, so late systems can still read events emitted earlier in the same frame).\n\nUpdate ecs/index.ts to export.\n\nAdd tests: emit and read in same frame, events cleared on beginFrame, multiple events of same type accumulate, different event types are independent.",
+      "files": [
+        "src/engine/ecs/events.ts",
+        "src/engine/ecs/events.test.ts",
+        "src/engine/ecs/types.ts",
+        "src/engine/ecs/world.ts",
+        "src/engine/ecs/index.ts"
+      ],
+      "success_criteria": [
+        "EventBus buffers events per type within a frame",
+        "emit appends to the buffer, read returns all buffered events",
+        "Events are cleared on beginFrame (not endFrame, so same-frame reads work)",
+        "World interface has emit/read methods",
+        "Events are typed via EventRegistry generic",
+        "All existing tests pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    },
+    {
+      "id": 17,
+      "title": "Batch entity creation",
+      "priority": "P3",
+      "done": false,
+      "description": "Add a spawn method for efficient bulk entity creation with components.\n\nChanges to src/engine/ecs/world.ts:\n- Add spawn<Components>(count, componentFactories) method. componentFactories is a partial record mapping component type names to either a value (same for all) or a factory function (index) => value. Returns an array of the created EntityIds.\n- Implementation: loop count times, create entity, for each factory entry call it (or use the static value) and addComponent. This is a convenience wrapper — no deep optimization needed yet. The value is in the ergonomic API and having a single point to optimize later.\n\nAdd to World interface in types.ts.\n\nAdd tests: spawn 10 entities with Transform, verify all 10 exist and have correct components, factory receives index parameter, spawn with multiple component types.",
+      "files": ["src/engine/ecs/types.ts", "src/engine/ecs/world.ts", "src/engine/ecs/world.test.ts"],
+      "success_criteria": [
+        "world.spawn(count, factories) creates count entities with components",
+        "Factory functions receive the iteration index",
+        "Static values are applied to all entities",
+        "Returns array of created EntityIds",
+        "All created entities are alive and have the specified components",
+        "Change tracking records all as added",
+        "All existing tests pass",
+        "pnpm typecheck passes",
+        "pnpm test:run passes"
+      ]
+    }
+  ]
+}
