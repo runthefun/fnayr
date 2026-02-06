@@ -379,6 +379,34 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
   }
 
   /**
+   * Number of alive entities.
+   */
+  get entityCount(): number {
+    return this.entityManager.size;
+  }
+
+  /**
+   * Number of entities that have the given component.
+   */
+  componentCount<K extends ComponentType<R>>(type: K): number {
+    this.assertRegistered(type);
+    const store = this.stores.get(type);
+    return store ? store.size : 0;
+  }
+
+  /**
+   * Returns a snapshot of entity and per-component counts.
+   */
+  stats(): { entities: number; components: Record<string, number> } {
+    const components: Record<string, number> = {};
+    for (const type of Object.keys(this.registry)) {
+      const store = this.stores.get(type as ComponentType<R>);
+      components[type] = store ? store.size : 0;
+    }
+    return { entities: this.entityManager.size, components };
+  }
+
+  /**
    * Registers a callback invoked after an entity is destroyed.
    */
   onEntityDestroyed(listener: (entity: number) => void): () => void {

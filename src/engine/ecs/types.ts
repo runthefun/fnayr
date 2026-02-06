@@ -171,4 +171,10 @@ export interface World<R extends ComponentRegistry, Res extends ResourceRegistry
   getResource<K extends ResourceType<Res>>(type: K): ResourceData<Res, K> | undefined;
   /** Returns true if the resource has been set. */
   hasResource<K extends ResourceType<Res>>(type: K): boolean;
+  /** Number of alive entities. */
+  readonly entityCount: number;
+  /** Number of entities that have the given component. */
+  componentCount<K extends ComponentType<R>>(type: K): number;
+  /** Returns a snapshot of entity and per-component counts. */
+  stats(): { entities: number; components: Record<string, number> };
 }

@@ -556,3 +556,132 @@ describe("Resources / singletons", () => {
     expect(() => (world as any).setResource("Unknown", {})).toThrow(/unknown resource/i);
   });
 });
+
+describe("Entity count and debug stats", () => {
+  const registry = {
+    Transform: s.object({ x: s.number() }),
+    Name: s.object({ label: s.string() }),
+    Visible: s.tag(),
+  };
+
+  it("entityCount is 0 on a fresh world", () => {
+    const world = createWorld(registry);
+    expect(world.entityCount).toBe(0);
+  });
+
+  it("entityCount increases after creating entities", () => {
+    const world = createWorld(registry);
+    world.createEntity();
+    expect(world.entityCount).toBe(1);
+    world.createEntity();
+    expect(world.entityCount).toBe(2);
+  });
+
+  it("entityCount decreases after destroying entities", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+    expect(world.entityCount).toBe(2);
+
+    world.destroyEntity(e1);
+    expect(world.entityCount).toBe(1);
+
+    world.destroyEntity(e2);
+    expect(world.entityCount).toBe(0);
+  });
+
+  it("componentCount returns 0 when no entities have the component", () => {
+    const world = createWorld(registry);
+    world.createEntity();
+    expect(world.componentCount("Transform")).toBe(0);
+  });
+
+  it("componentCount returns correct count after add/remove", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+    const e3 = world.createEntity();
+
+    world.addComponent(e1, "Transform", { x: 1 });
+    world.addComponent(e2, "Transform", { x: 2 });
+    expect(world.componentCount("Transform")).toBe(2);
+
+    world.addComponent(e3, "Name", { label: "test" });
+    expect(world.componentCount("Name")).toBe(1);
+
+    world.removeComponent(e1, "Transform");
+    expect(world.componentCount("Transform")).toBe(1);
+  });
+
+  it("componentCount updates when entity is destroyed", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    world.addComponent(e1, "Transform", { x: 1 });
+    world.addComponent(e1, "Name", { label: "hero" });
+
+    expect(world.componentCount("Transform")).toBe(1);
+    expect(world.componentCount("Name")).toBe(1);
+
+    world.destroyEntity(e1);
+
+    expect(world.componentCount("Transform")).toBe(0);
+    expect(world.componentCount("Name")).toBe(0);
+  });
+
+  it("componentCount throws for unknown component type", () => {
+    const world = createWorld(registry);
+    expect(() => (world as any).componentCount("Unknown")).toThrow(/unknown component/i);
+  });
+
+  it("stats() returns correct shape and values", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+
+    world.addComponent(e1, "Transform", { x: 1 });
+    world.addComponent(e2, "Transform", { x: 2 });
+    world.addComponent(e1, "Name", { label: "hero" });
+    world.addComponent(e2, "Visible");
+
+    const result = world.stats();
+
+    expect(result.entities).toBe(2);
+    expect(result.components).toEqual({
+      Transform: 2,
+      Name: 1,
+      Visible: 1,
+    });
+  });
+
+  it("stats() reflects changes after destroy", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+
+    world.addComponent(e1, "Transform", { x: 1 });
+    world.addComponent(e2, "Transform", { x: 2 });
+    world.addComponent(e1, "Name", { label: "hero" });
+
+    world.destroyEntity(e1);
+
+    const result = world.stats();
+    expect(result.entities).toBe(1);
+    expect(result.components).toEqual({
+      Transform: 1,
+      Name: 0,
+      Visible: 0,
+    });
+  });
+
+  it("stats() returns zeros on empty world", () => {
+    const world = createWorld(registry);
+    const result = world.stats();
+
+    expect(result.entities).toBe(0);
+    expect(result.components).toEqual({
+      Transform: 0,
+      Name: 0,
+      Visible: 0,
+    });
+  });
+});
