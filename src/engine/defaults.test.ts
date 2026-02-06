@@ -73,6 +73,12 @@ describe("getDefault", () => {
     expect(getDefault(optionalSchema)).toBeUndefined();
   });
 
+  it("returns true for tag schemas", () => {
+    const tagSchema = defineSchema({ type: "tag" });
+
+    expect(getDefault(tagSchema)).toBe(true);
+  });
+
   it("uses tagged-union defaults with fallback to the first variant", () => {
     const colliderSchema = defineSchema({
       type: "taggedUnion",

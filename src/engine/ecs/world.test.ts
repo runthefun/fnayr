@@ -183,3 +183,121 @@ describe("EcsWorld", () => {
     expect(world.getRemoved("Name")).toContain(entity);
   });
 });
+
+describe("Tag components", () => {
+  const tagRegistry = {
+    Transform: s.object({ x: s.number() }),
+    Visible: s.tag(),
+    Static: s.tag(),
+  };
+
+  it("addComponent without data arg works for tag components", () => {
+    const world = createWorld(tagRegistry);
+    const entity = world.createEntity();
+
+    world.addComponent(entity, "Visible");
+
+    expect(world.hasComponent(entity, "Visible")).toBe(true);
+    expect(world.getComponent(entity, "Visible")).toBe(true);
+  });
+
+  it("addComponent with explicit data for tag stores true regardless", () => {
+    const world = createWorld(tagRegistry);
+    const entity = world.createEntity();
+
+    // Even if data is passed, tag always stores true
+    world.addComponent(entity, "Visible");
+
+    expect(world.getComponent(entity, "Visible")).toBe(true);
+  });
+
+  it("hasComponent returns true for tag components", () => {
+    const world = createWorld(tagRegistry);
+    const entity = world.createEntity();
+
+    world.addComponent(entity, "Visible");
+
+    expect(world.hasComponent(entity, "Visible")).toBe(true);
+  });
+
+  it("tag components can be removed", () => {
+    const world = createWorld(tagRegistry);
+    const entity = world.createEntity();
+    world.addComponent(entity, "Visible");
+
+    world.removeComponent(entity, "Visible");
+
+    expect(world.hasComponent(entity, "Visible")).toBe(false);
+    expect(world.getComponent(entity, "Visible")).toBeUndefined();
+  });
+
+  it("tag components participate in queries (include)", () => {
+    const world = createWorld(tagRegistry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+    const e3 = world.createEntity();
+
+    world.addComponent(e1, "Transform", { x: 1 });
+    world.addComponent(e1, "Visible");
+
+    world.addComponent(e2, "Transform", { x: 2 });
+
+    world.addComponent(e3, "Transform", { x: 3 });
+    world.addComponent(e3, "Visible");
+
+    const results = [...world.query(["Transform", "Visible"] as const)];
+    const entities = results.map((r) => r.entity);
+
+    expect(entities).toContain(e1);
+    expect(entities).not.toContain(e2);
+    expect(entities).toContain(e3);
+
+    // Verify tag data is available in query results
+    for (const r of results) {
+      expect(r.components.Visible).toBe(true);
+    }
+  });
+
+  it("tag components participate in queries (exclude)", () => {
+    const world = createWorld(tagRegistry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+
+    world.addComponent(e1, "Transform", { x: 1 });
+    world.addComponent(e1, "Static");
+
+    world.addComponent(e2, "Transform", { x: 2 });
+
+    const results = [
+      ...world.query(["Transform"] as const, { exclude: ["Static"] }),
+    ];
+    const entities = results.map((r) => r.entity);
+
+    expect(entities).not.toContain(e1);
+    expect(entities).toContain(e2);
+  });
+
+  it("tag components are tracked in change tracking", () => {
+    const world = createWorld(tagRegistry);
+    world.beginFrame();
+
+    const entity = world.createEntity();
+    world.addComponent(entity, "Visible");
+
+    expect(world.getAdded("Visible")).toContain(entity);
+
+    world.beginFrame();
+    world.removeComponent(entity, "Visible");
+
+    expect(world.getRemoved("Visible")).toContain(entity);
+  });
+
+  it("throws when addComponent is called without data for non-tag component", () => {
+    const world = createWorld(tagRegistry);
+    const entity = world.createEntity();
+
+    expect(() =>
+      world.addComponent(entity, "Transform")
+    ).toThrow(/required/i);
+  });
+});

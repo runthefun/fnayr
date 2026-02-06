@@ -50,6 +50,18 @@ describe("materialize", () => {
       { path: "$.scale", message: "Expected number" },
     ]);
   });
+
+  it("materializes tag schema to true", () => {
+    const tagSchema = defineSchema({ type: "tag" });
+
+    const result = materialize(tagSchema, undefined);
+    expect(result.value).toBe(true);
+    expect(result.issues).toEqual([]);
+
+    const resultExplicit = materialize(tagSchema, true);
+    expect(resultExplicit.value).toBe(true);
+    expect(resultExplicit.issues).toEqual([]);
+  });
 });
 
 describe("applyDefaults", () => {

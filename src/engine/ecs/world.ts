@@ -86,12 +86,19 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
   addComponent<K extends ComponentType<R>>(
     entity: number,
     type: K,
-    data: ComponentData<R, K>
+    data?: ComponentData<R, K>
   ): void {
     this.assertAlive(entity, "add component");
+    const schema = this.registry[type];
+    let value: unknown = data;
+    if (schema.type === "tag") {
+      value = true;
+    } else if (data === undefined) {
+      throw new Error(`Component data is required for non-tag component "${type}"`);
+    }
     const store = this.getStore(type);
     const existed = store.has(entity);
-    store.set(entity, data);
+    store.set(entity, value as ComponentData<R, K>);
     if (existed) {
       this.recordUpdated(type, entity);
     } else {

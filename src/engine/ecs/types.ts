@@ -109,7 +109,7 @@ export interface World<R extends ComponentRegistry> {
   addComponent<K extends ComponentType<R>>(
     entity: EntityId,
     type: K,
-    data: ComponentData<R, K>
+    data?: ComponentData<R, K>
   ): void;
   /** Removes a component from the entity. */
   removeComponent<K extends ComponentType<R>>(entity: EntityId, type: K): void;

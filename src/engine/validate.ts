@@ -217,6 +217,12 @@ const validateValue = (
       validateValue(s.inner, value, path, issues, options);
       return;
     }
+    case "tag": {
+      if (value !== true) {
+        pushIssue(issues, path, "Expected true");
+      }
+      return;
+    }
     case "taggedUnion": {
       const s = schema as TaggedUnionSchema;
       if (!isObject(value)) {

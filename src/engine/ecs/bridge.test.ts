@@ -76,6 +76,35 @@ describe("worldFromJson/worldToJson", () => {
     });
   });
 
+  it("round-trips tag components", () => {
+    const tagRegistry = {
+      Transform: s.object({ x: s.number() }),
+      Visible: s.tag(),
+    };
+
+    const json = {
+      version: 1,
+      entities: [
+        {
+          id: 1,
+          components: {
+            Transform: { x: 4 },
+            Visible: true,
+          },
+        },
+      ],
+    };
+
+    const parsed = worldFromJson(tagRegistry, json);
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.world.hasComponent(1, "Visible")).toBe(true);
+    expect(parsed.world.getComponent(1, "Visible")).toBe(true);
+
+    const serialized = worldToJson(tagRegistry, parsed.world);
+    expect(serialized.issues).toEqual([]);
+    expect(serialized.json).toEqual(json);
+  });
+
   it("registers cleanup for hydrated unknown components", () => {
     const listenerSpy = vi.spyOn(EcsWorld.prototype, "onEntityDestroyed");
     const json = {

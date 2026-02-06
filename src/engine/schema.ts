@@ -70,6 +70,8 @@ export type OptionalSchema<Inner extends SchemaLike = SchemaLike> =
     inner: Inner;
   };
 
+export type TagSchema = SchemaBase<"tag">;
+
 export type TaggedUnionSchema<
   TagKey extends string = "kind",
   Variants extends Record<string, ObjectSchema> = Record<string, ObjectSchema>,
@@ -96,7 +98,8 @@ export type Schema =
   | TupleSchema
   | MapSchema
   | OptionalSchema
-  | TaggedUnionSchema;
+  | TaggedUnionSchema
+  | TagSchema;
 
 export type UnwrapOptional<S extends SchemaLike> =
   S extends OptionalSchema<infer Inner> ? Inner : S;
@@ -116,29 +119,31 @@ export type ObjectValue<Props extends Record<string, SchemaLike>> = {
   [K in OptionalKeys<Props>]?: SchemaValue<UnwrapOptional<Props[K]>>;
 };
 
-export type SchemaValue<S extends SchemaLike> = S extends StringSchema
-  ? string
-  : S extends NumberSchema
-    ? number
-    : S extends BooleanSchema
-      ? boolean
-      : S extends EnumSchema<infer Values>
-        ? Values[number]
-        : S extends LiteralSchema<infer Value>
-          ? Value
-          : S extends ArraySchema<infer Item>
-            ? SchemaValue<Item>[]
-            : S extends TupleSchema<infer Items>
-              ? { [K in keyof Items]: SchemaValue<Items[K]> }
-              : S extends MapSchema<infer ValueSchema>
-                ? Record<string, SchemaValue<ValueSchema>>
-                : S extends OptionalSchema<infer Inner>
-                  ? SchemaValue<Inner> | undefined
-                  : S extends ObjectSchema<infer Props>
-                    ? ObjectValue<Props>
-                    : S extends TaggedUnionSchema<any, infer Variants>
-                      ? SchemaValue<Variants[keyof Variants]>
-                      : unknown;
+export type SchemaValue<S extends SchemaLike> = S extends TagSchema
+  ? true
+  : S extends StringSchema
+    ? string
+    : S extends NumberSchema
+      ? number
+      : S extends BooleanSchema
+        ? boolean
+        : S extends EnumSchema<infer Values>
+          ? Values[number]
+          : S extends LiteralSchema<infer Value>
+            ? Value
+            : S extends ArraySchema<infer Item>
+              ? SchemaValue<Item>[]
+              : S extends TupleSchema<infer Items>
+                ? { [K in keyof Items]: SchemaValue<Items[K]> }
+                : S extends MapSchema<infer ValueSchema>
+                  ? Record<string, SchemaValue<ValueSchema>>
+                  : S extends OptionalSchema<infer Inner>
+                    ? SchemaValue<Inner> | undefined
+                    : S extends ObjectSchema<infer Props>
+                      ? ObjectValue<Props>
+                      : S extends TaggedUnionSchema<any, infer Variants>
+                        ? SchemaValue<Variants[keyof Variants]>
+                        : unknown;
 
 export type Prettify<T> = T extends readonly any[]
   ? T
@@ -247,6 +252,9 @@ export const s = {
     inner,
   }),
   tagged,
+  tag: (): TagSchema => ({
+    type: "tag",
+  }),
 } as const;
 
 const getDefaultValue = (schema: SchemaLike): unknown => {
@@ -294,6 +302,9 @@ const getDefaultValue = (schema: SchemaLike): unknown => {
     }
     case "optional": {
       return undefined;
+    }
+    case "tag": {
+      return true;
     }
     case "taggedUnion": {
       const s = schema as TaggedUnionSchema;

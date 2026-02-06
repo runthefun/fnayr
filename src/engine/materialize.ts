@@ -141,6 +141,9 @@ const applyDefaultsValue = (
       }
       return applyDefaultsValue(s.inner, value, false);
     }
+    case "tag": {
+      return true;
+    }
     case "taggedUnion": {
       const s = schema as TaggedUnionSchema;
       if (missing) {

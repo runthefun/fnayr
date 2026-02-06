@@ -341,6 +341,21 @@ describe("validate", () => {
     expect(undefinedOptional).toEqual([]);
   });
 
+  it("validates tag schemas accept true", () => {
+    const tagSchema = defineSchema({ type: "tag" });
+
+    expect(validate(tagSchema, true)).toEqual([]);
+    expect(validate(tagSchema, false)).toEqual([
+      { path: "$", message: "Expected true" },
+    ]);
+    expect(validate(tagSchema, "yes")).toEqual([
+      { path: "$", message: "Expected true" },
+    ]);
+    expect(validate(tagSchema, undefined)).toEqual([
+      { path: "$", message: "Expected true" },
+    ]);
+  });
+
   it("validates enums and literals", () => {
     const enumSchema = defineSchema({
       type: "enum",
