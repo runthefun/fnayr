@@ -179,6 +179,16 @@ export class EntityManager {
   }
 
   /**
+   * Resets the entity manager to its initial state, invalidating all entity IDs.
+   */
+  reset(): void {
+    this.generations.length = 0;
+    this.alive.length = 0;
+    this.free.clear();
+    this.aliveCount = 0;
+  }
+
+  /**
    * Iterates all alive entity ids via callback (no generator allocation).
    */
   forEachEntity(callback: (entity: EntityId) => void): void {

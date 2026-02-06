@@ -177,4 +177,6 @@ export interface World<R extends ComponentRegistry, Res extends ResourceRegistry
   componentCount<K extends ComponentType<R>>(type: K): number;
   /** Returns a snapshot of entity and per-component counts. */
   stats(): { entities: number; components: Record<string, number> };
+  /** Destroys all entities (firing destroy listeners) and resets the world to an empty state. */
+  clear(): void;
 }

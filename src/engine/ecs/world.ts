@@ -407,6 +407,33 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
   }
 
   /**
+   * Destroys all entities (firing destroy listeners) and resets the world to an empty state.
+   */
+  clear(): void {
+    // Collect alive entities first (snapshot to avoid mutation during iteration)
+    const alive: number[] = [];
+    this.entityManager.forEachEntity((entity) => alive.push(entity));
+
+    // Fire destroy listeners for each alive entity while components are still accessible
+    for (const entity of alive) {
+      for (const listener of this.destroyListeners) {
+        listener(entity);
+      }
+    }
+
+    // Clear all component stores
+    for (const store of this.stores.values()) {
+      store.clear();
+    }
+
+    // Reset entity manager
+    this.entityManager.reset();
+
+    // Flush all change tracking
+    this.flushChanges();
+  }
+
+  /**
    * Registers a callback invoked after an entity is destroyed.
    */
   onEntityDestroyed(listener: (entity: number) => void): () => void {

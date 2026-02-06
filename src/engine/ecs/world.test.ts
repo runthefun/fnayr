@@ -557,6 +557,137 @@ describe("Resources / singletons", () => {
   });
 });
 
+describe("World clear / reset", () => {
+  const registry = {
+    Transform: s.object({ x: s.number() }),
+    Name: s.object({ label: s.string() }),
+    Visible: s.tag(),
+  };
+
+  it("clear() sets entityCount to 0", () => {
+    const world = createWorld(registry);
+    world.createEntity();
+    world.createEntity();
+    world.createEntity();
+
+    world.clear();
+
+    expect(world.entityCount).toBe(0);
+  });
+
+  it("clear() makes old entity IDs no longer alive", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+    world.addComponent(e1, "Transform", { x: 1 });
+    world.addComponent(e2, "Name", { label: "test" });
+
+    world.clear();
+
+    expect(world.isAlive(e1)).toBe(false);
+    expect(world.isAlive(e2)).toBe(false);
+  });
+
+  it("clear() empties all component stores", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+    world.addComponent(e1, "Transform", { x: 1 });
+    world.addComponent(e2, "Transform", { x: 2 });
+    world.addComponent(e1, "Name", { label: "hero" });
+    world.addComponent(e2, "Visible");
+
+    world.clear();
+
+    expect(world.componentCount("Transform")).toBe(0);
+    expect(world.componentCount("Name")).toBe(0);
+    expect(world.componentCount("Visible")).toBe(0);
+  });
+
+  it("clear() fires destroy listeners for each alive entity", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+    const e3 = world.createEntity();
+    world.addComponent(e1, "Transform", { x: 1 });
+    world.addComponent(e2, "Transform", { x: 2 });
+
+    const destroyed: number[] = [];
+    world.onEntityDestroyed((entity) => destroyed.push(entity));
+
+    world.clear();
+
+    expect(destroyed).toHaveLength(3);
+    expect(destroyed).toContain(e1);
+    expect(destroyed).toContain(e2);
+    expect(destroyed).toContain(e3);
+  });
+
+  it("destroy listeners can access components during clear()", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    world.addComponent(e1, "Transform", { x: 42 });
+
+    let observedTransform: { x: number } | undefined;
+    world.onEntityDestroyed((entity) => {
+      observedTransform = world.getComponent(entity, "Transform");
+    });
+
+    world.clear();
+
+    expect(observedTransform).toEqual({ x: 42 });
+  });
+
+  it("new entities can be created after clear()", () => {
+    const world = createWorld(registry);
+    const oldEntity = world.createEntity();
+    world.addComponent(oldEntity, "Transform", { x: 1 });
+
+    world.clear();
+
+    const newEntity = world.createEntity();
+    expect(world.isAlive(newEntity)).toBe(true);
+    expect(world.entityCount).toBe(1);
+
+    world.addComponent(newEntity, "Transform", { x: 99 });
+    expect(world.getComponent(newEntity, "Transform")).toEqual({ x: 99 });
+  });
+
+  it("clear() flushes change tracking", () => {
+    const world = createWorld(registry);
+    world.beginFrame();
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 1 });
+
+    // There should be an added change before clear
+    expect(world.getAdded("Transform").size).toBe(1);
+
+    world.clear();
+
+    // After clear, change tracking should be flushed
+    expect(world.getAdded("Transform").size).toBe(0);
+    expect(world.getRemoved("Transform").size).toBe(0);
+    expect(world.getUpdated("Transform").size).toBe(0);
+  });
+
+  it("stats() reflects empty state after clear()", () => {
+    const world = createWorld(registry);
+    const e1 = world.createEntity();
+    world.addComponent(e1, "Transform", { x: 1 });
+    world.addComponent(e1, "Visible");
+
+    world.clear();
+
+    const result = world.stats();
+    expect(result.entities).toBe(0);
+    expect(result.components).toEqual({
+      Transform: 0,
+      Name: 0,
+      Visible: 0,
+    });
+  });
+});
+
 describe("Entity count and debug stats", () => {
   const registry = {
     Transform: s.object({ x: s.number() }),
