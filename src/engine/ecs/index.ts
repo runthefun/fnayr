@@ -4,3 +4,4 @@ export * from "./storage";
 export * from "./world";
 export * from "./bridge";
 export * from "./systems";
+export * from "./commands";

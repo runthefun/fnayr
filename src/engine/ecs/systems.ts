@@ -1,9 +1,16 @@
 import type { ComponentRegistry, World } from "./types";
+import type { Commands } from "./commands";
+import { CommandBuffer } from "./commands";
 
 /**
  * Runtime system function signature.
+ * The optional third parameter provides a deferred command buffer.
  */
-export type System<R extends ComponentRegistry> = (world: World<R>, dt: number) => void;
+export type System<R extends ComponentRegistry> = (
+  world: World<R>,
+  dt: number,
+  commands: Commands<R>
+) => void;
 
 interface SystemEntry<R extends ComponentRegistry> {
   system: System<R>;
@@ -108,7 +115,9 @@ export class Scheduler<R extends ComponentRegistry> {
       const entries = this.phases.get(phase)!;
       for (const entry of entries) {
         if (entry.enabled) {
-          entry.system(this.world, dt);
+          const cmds = new CommandBuffer(this.world);
+          entry.system(this.world, dt, cmds);
+          cmds.flush();
         }
       }
     }
