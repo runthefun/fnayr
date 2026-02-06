@@ -4,6 +4,9 @@ import type {
   ComponentType,
   Query,
   QueryOptions,
+  ResourceData,
+  ResourceRegistry,
+  ResourceType,
   World,
 } from "./types";
 import { EntityManager } from "./entity";
@@ -16,8 +19,11 @@ const hasOwn = (value: object, key: PropertyKey): boolean =>
 /**
  * Runtime ECS world composed of entities and component stores.
  */
-export class EcsWorld<R extends ComponentRegistry> implements World<R> {
+export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry = {}>
+  implements World<R, Res>
+{
   readonly registry: R;
+  readonly resourceRegistry: Res;
   private readonly entityManager: EntityManager;
   private readonly stores = new Map<ComponentType<R>, SparseSetStore<unknown>>();
   private readonly destroyListeners = new Set<(entity: number) => void>();
@@ -25,12 +31,17 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
     ComponentType<R>,
     { added: Set<number>; removed: Set<number>; updated: Set<number> }
   >();
+  private readonly resources = new Map<string, unknown>();
 
   /**
    * Creates a new ECS world for the given registry.
    */
-  constructor(registry: R, options: { capacity?: number } = {}) {
+  constructor(
+    registry: R,
+    options: { capacity?: number; resources?: Res } = {}
+  ) {
     this.registry = registry;
+    this.resourceRegistry = (options.resources ?? {}) as Res;
     this.entityManager = new EntityManager(options.capacity);
   }
 
@@ -339,6 +350,35 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
   }
 
   /**
+   * Sets a resource value.
+   */
+  setResource<K extends ResourceType<Res>>(
+    type: K,
+    data: ResourceData<Res, K>
+  ): void {
+    this.assertResourceRegistered(type);
+    this.resources.set(type, data);
+  }
+
+  /**
+   * Returns a resource value, or undefined if not set.
+   */
+  getResource<K extends ResourceType<Res>>(
+    type: K
+  ): ResourceData<Res, K> | undefined {
+    this.assertResourceRegistered(type);
+    return this.resources.get(type) as ResourceData<Res, K> | undefined;
+  }
+
+  /**
+   * Returns true if the resource has been set.
+   */
+  hasResource<K extends ResourceType<Res>>(type: K): boolean {
+    this.assertResourceRegistered(type);
+    return this.resources.has(type);
+  }
+
+  /**
    * Registers a callback invoked after an entity is destroyed.
    */
   onEntityDestroyed(listener: (entity: number) => void): () => void {
@@ -357,6 +397,12 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
   private assertRegistered(type: ComponentType<R>): void {
     if (!hasOwn(this.registry, type)) {
       throw new Error(`Unknown component type: ${type}`);
+    }
+  }
+
+  private assertResourceRegistered(type: ResourceType<Res>): void {
+    if (!hasOwn(this.resourceRegistry, type)) {
+      throw new Error(`Unknown resource type: ${type}`);
     }
   }
 
@@ -418,7 +464,17 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
 /**
  * Creates a new ECS world for a registry.
  */
-export const createWorld = <R extends ComponentRegistry>(
+export function createWorld<R extends ComponentRegistry>(
   registry: R,
-  options: { capacity?: number } = {}
-): EcsWorld<R> => new EcsWorld(registry, options);
+  options?: { capacity?: number }
+): EcsWorld<R>;
+export function createWorld<R extends ComponentRegistry, Res extends ResourceRegistry>(
+  registry: R,
+  options: { capacity?: number; resources: Res }
+): EcsWorld<R, Res>;
+export function createWorld<R extends ComponentRegistry, Res extends ResourceRegistry>(
+  registry: R,
+  options: { capacity?: number; resources?: Res } = {}
+): EcsWorld<R, Res> {
+  return new EcsWorld(registry, options);
+}

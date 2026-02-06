@@ -463,3 +463,96 @@ describe("change tracking returns ReadonlySet", () => {
     expect(added.size).toBe(0);
   });
 });
+
+describe("Resources / singletons", () => {
+  const registry = {
+    Transform: s.object({ x: s.number() }),
+  };
+
+  const resourceRegistry = {
+    Time: s.object({ delta: s.number(), elapsed: s.number() }),
+    Config: s.object({ debug: s.boolean() }),
+  };
+
+  it("set and get a resource", () => {
+    const world = createWorld(registry, { resources: resourceRegistry });
+
+    world.setResource("Time", { delta: 0.016, elapsed: 1.5 });
+
+    expect(world.getResource("Time")).toEqual({ delta: 0.016, elapsed: 1.5 });
+  });
+
+  it("hasResource returns false when not set, true when set", () => {
+    const world = createWorld(registry, { resources: resourceRegistry });
+
+    expect(world.hasResource("Time")).toBe(false);
+
+    world.setResource("Time", { delta: 0, elapsed: 0 });
+
+    expect(world.hasResource("Time")).toBe(true);
+  });
+
+  it("getResource returns undefined when not set", () => {
+    const world = createWorld(registry, { resources: resourceRegistry });
+
+    expect(world.getResource("Time")).toBeUndefined();
+  });
+
+  it("setResource overwrites previous value", () => {
+    const world = createWorld(registry, { resources: resourceRegistry });
+
+    world.setResource("Config", { debug: false });
+    expect(world.getResource("Config")).toEqual({ debug: false });
+
+    world.setResource("Config", { debug: true });
+    expect(world.getResource("Config")).toEqual({ debug: true });
+  });
+
+  it("resources are not affected by beginFrame/endFrame", () => {
+    const world = createWorld(registry, { resources: resourceRegistry });
+
+    world.setResource("Time", { delta: 0.016, elapsed: 1.0 });
+
+    world.beginFrame();
+    expect(world.getResource("Time")).toEqual({ delta: 0.016, elapsed: 1.0 });
+
+    world.endFrame();
+    expect(world.getResource("Time")).toEqual({ delta: 0.016, elapsed: 1.0 });
+  });
+
+  it("resources are not affected by flushChanges", () => {
+    const world = createWorld(registry, { resources: resourceRegistry });
+
+    world.setResource("Config", { debug: true });
+    world.flushChanges();
+
+    expect(world.getResource("Config")).toEqual({ debug: true });
+    expect(world.hasResource("Config")).toBe(true);
+  });
+
+  it("multiple resources are independent", () => {
+    const world = createWorld(registry, { resources: resourceRegistry });
+
+    world.setResource("Time", { delta: 0.016, elapsed: 0 });
+    world.setResource("Config", { debug: true });
+
+    expect(world.getResource("Time")).toEqual({ delta: 0.016, elapsed: 0 });
+    expect(world.getResource("Config")).toEqual({ debug: true });
+  });
+
+  it("world without resource registry has no resource methods that accept keys", () => {
+    const world = createWorld(registry);
+
+    // No resources registered, so calling with any key should throw
+    // TypeScript would prevent this at compile time, but we verify runtime behavior
+    expect(() => (world as any).setResource("Foo", {})).toThrow(/unknown resource/i);
+    expect(() => (world as any).getResource("Foo")).toThrow(/unknown resource/i);
+    expect(() => (world as any).hasResource("Foo")).toThrow(/unknown resource/i);
+  });
+
+  it("setResource throws for unregistered resource type", () => {
+    const world = createWorld(registry, { resources: resourceRegistry });
+
+    expect(() => (world as any).setResource("Unknown", {})).toThrow(/unknown resource/i);
+  });
+});

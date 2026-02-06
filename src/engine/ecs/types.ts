@@ -16,6 +16,27 @@ export type ComponentSchema = SchemaLike;
 export type ComponentRegistry = Record<string, ComponentSchema>;
 
 /**
+ * Registry mapping resource names to their schemas.
+ */
+export type ResourceRegistry = Record<string, SchemaLike>;
+
+/**
+ * Resource type name within a registry.
+ */
+export type ResourceType<Res extends ResourceRegistry = ResourceRegistry> = Extract<
+  keyof Res,
+  string
+>;
+
+/**
+ * Runtime data shape for a resource schema.
+ */
+export type ResourceData<
+  Res extends ResourceRegistry,
+  K extends ResourceType<Res>,
+> = SchemaValue<Res[K]>;
+
+/**
  * Component type name within a registry.
  */
 export type ComponentType<R extends ComponentRegistry = ComponentRegistry> = Extract<
@@ -94,7 +115,7 @@ export interface Query<
 /**
  * World interface combining entities and component storage.
  */
-export interface World<R extends ComponentRegistry> {
+export interface World<R extends ComponentRegistry, Res extends ResourceRegistry = {}> {
   /** Component registry used by the world. */
   readonly registry: R;
   /** Creates and returns a new entity. */
@@ -144,4 +165,10 @@ export interface World<R extends ComponentRegistry> {
   getUpdated<K extends ComponentType<R>>(type: K): ReadonlySet<EntityId>;
   /** Iterates all alive entities via callback (no generator allocation). */
   forEachEntity(callback: (entity: EntityId) => void): void;
+  /** Sets a resource value. */
+  setResource<K extends ResourceType<Res>>(type: K, data: ResourceData<Res, K>): void;
+  /** Returns a resource value, or undefined if not set. */
+  getResource<K extends ResourceType<Res>>(type: K): ResourceData<Res, K> | undefined;
+  /** Returns true if the resource has been set. */
+  hasResource<K extends ResourceType<Res>>(type: K): boolean;
 }
