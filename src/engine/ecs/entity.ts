@@ -53,7 +53,7 @@ export class EntityManager {
   private readonly capacity: number;
   private readonly generations: number[] = [];
   private readonly alive: boolean[] = [];
-  private readonly free: number[] = [];
+  private readonly free = new Set<number>();
   private aliveCount = 0;
 
   /**
@@ -79,7 +79,13 @@ export class EntityManager {
    * Creates a new entity id.
    */
   create(): EntityId {
-    let index = this.free.pop();
+    let index: number | undefined;
+    const iter = this.free.values();
+    const first = iter.next();
+    if (!first.done) {
+      index = first.value;
+      this.free.delete(index);
+    }
     if (index === undefined) {
       index = this.generations.length;
       if (index >= this.capacity) {
@@ -110,7 +116,7 @@ export class EntityManager {
     while (this.generations.length <= index) {
       this.generations.push(0);
       this.alive.push(false);
-      this.free.push(this.generations.length - 1);
+      this.free.add(this.generations.length - 1);
     }
 
     const currentGeneration = this.generations[index];
@@ -127,10 +133,7 @@ export class EntityManager {
     this.alive[index] = true;
     this.aliveCount += 1;
 
-    const freeIndex = this.free.indexOf(index);
-    if (freeIndex !== -1) {
-      this.free.splice(freeIndex, 1);
-    }
+    this.free.delete(index);
 
     return makeEntityId(index, this.generations[index], this.capacity);
   }
@@ -145,7 +148,7 @@ export class EntityManager {
     const index = getEntityIndex(entity);
     this.alive[index] = false;
     this.generations[index] += 1;
-    this.free.push(index);
+    this.free.add(index);
     this.aliveCount = Math.max(0, this.aliveCount - 1);
   }
 

@@ -3,6 +3,7 @@ import {
   EntityManager,
   getEntityGeneration,
   getEntityIndex,
+  makeEntityId,
 } from "./entity";
 
 describe("EntityManager", () => {
@@ -46,5 +47,24 @@ describe("EntityManager", () => {
     expect(getEntityIndex(second)).toBe(0);
     expect(getEntityGeneration(second)).toBe(1);
     expect(manager.isAlive(second)).toBe(true);
+  });
+
+  it("reserves 100 entities by ID and verifies they are all alive with correct IDs", () => {
+    const manager = new EntityManager();
+    const ids: number[] = [];
+
+    for (let i = 0; i < 100; i++) {
+      const entity = makeEntityId(i, 0);
+      const reserved = manager.reserve(entity);
+      ids.push(reserved);
+    }
+
+    expect(manager.size).toBe(100);
+
+    for (let i = 0; i < 100; i++) {
+      expect(manager.isAlive(ids[i])).toBe(true);
+      expect(getEntityIndex(ids[i])).toBe(i);
+      expect(getEntityGeneration(ids[i])).toBe(0);
+    }
   });
 });
