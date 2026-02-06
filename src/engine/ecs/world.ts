@@ -4,6 +4,8 @@ import type {
   ComponentRegistry,
   ComponentType,
   EntityId,
+  EventData,
+  EventType,
   Query,
   QueryOptions,
   ResourceData,
@@ -11,6 +13,8 @@ import type {
   ResourceType,
   World,
 } from "./types";
+import type { EventRegistry } from "./events";
+import { EventBus } from "./events";
 import { EntityManager } from "./entity";
 import { SparseSetStore } from "./storage";
 import { getDefault } from "../schema";
@@ -151,8 +155,11 @@ class CachedQueryImpl<
 /**
  * Runtime ECS world composed of entities and component stores.
  */
-export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry = {}>
-  implements World<R, Res>
+export class EcsWorld<
+  R extends ComponentRegistry,
+  Res extends ResourceRegistry = {},
+  E extends EventRegistry = {},
+> implements World<R, Res, E>
 {
   readonly registry: R;
   readonly resourceRegistry: Res;
@@ -165,17 +172,21 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
   >();
   private readonly resources = new Map<string, unknown>();
   private readonly cachedQueries: CachedQueryImpl<R, readonly ComponentType<R>[]>[] = [];
+  private readonly eventBus: EventBus<E> | undefined;
 
   /**
    * Creates a new ECS world for the given registry.
    */
   constructor(
     registry: R,
-    options: { capacity?: number; resources?: Res } = {}
+    options: { capacity?: number; resources?: Res; events?: E } = {}
   ) {
     this.registry = registry;
     this.resourceRegistry = (options.resources ?? {}) as Res;
     this.entityManager = new EntityManager(options.capacity);
+    if (options.events) {
+      this.eventBus = new EventBus(options.events);
+    }
   }
 
   /**
@@ -454,9 +465,11 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
 
   /**
    * Clears tracked changes at the start of a frame.
+   * Also clears event buffers from the previous frame.
    */
   beginFrame(): void {
     this.flushChanges();
+    this.eventBus?.flush();
   }
 
   /**
@@ -535,6 +548,26 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
   hasResource<K extends ResourceType<Res>>(type: K): boolean {
     this.assertResourceRegistered(type);
     return this.resources.has(type);
+  }
+
+  /**
+   * Emits an event, appending it to the buffer for the current frame.
+   */
+  emit<K extends EventType<E>>(type: K, data: EventData<E, K>): void {
+    if (!this.eventBus) {
+      throw new Error("No event registry configured on this world");
+    }
+    this.eventBus.emit(type, data);
+  }
+
+  /**
+   * Returns all events of the given type emitted so far this frame.
+   */
+  read<K extends EventType<E>>(type: K): readonly EventData<E, K>[] {
+    if (!this.eventBus) {
+      throw new Error("No event registry configured on this world");
+    }
+    return this.eventBus.read(type);
   }
 
   /**
@@ -709,9 +742,21 @@ export function createWorld<R extends ComponentRegistry, Res extends ResourceReg
   registry: R,
   options: { capacity?: number; resources: Res }
 ): EcsWorld<R, Res>;
-export function createWorld<R extends ComponentRegistry, Res extends ResourceRegistry>(
+export function createWorld<
+  R extends ComponentRegistry,
+  Res extends ResourceRegistry,
+  E extends EventRegistry,
+>(
   registry: R,
-  options: { capacity?: number; resources?: Res } = {}
-): EcsWorld<R, Res> {
+  options: { capacity?: number; resources: Res; events: E }
+): EcsWorld<R, Res, E>;
+export function createWorld<
+  R extends ComponentRegistry,
+  Res extends ResourceRegistry,
+  E extends EventRegistry,
+>(
+  registry: R,
+  options: { capacity?: number; resources?: Res; events?: E } = {}
+): EcsWorld<R, Res, E> {
   return new EcsWorld(registry, options);
 }

@@ -1,4 +1,5 @@
 import type { SchemaLike, SchemaValue } from "../schema";
+import type { EventRegistry, EventType, EventData } from "./events";
 
 /**
  * Opaque entity handle that encodes an index and generation for stale-reference safety.
@@ -19,6 +20,9 @@ export type ComponentRegistry = Record<string, ComponentSchema>;
  * Registry mapping resource names to their schemas.
  */
 export type ResourceRegistry = Record<string, SchemaLike>;
+
+// Re-export event types for convenience
+export type { EventRegistry, EventType, EventData };
 
 /**
  * Resource type name within a registry.
@@ -126,7 +130,7 @@ export interface CachedQuery<
 /**
  * World interface combining entities and component storage.
  */
-export interface World<R extends ComponentRegistry, Res extends ResourceRegistry = {}> {
+export interface World<R extends ComponentRegistry, Res extends ResourceRegistry = {}, E extends EventRegistry = {}> {
   /** Component registry used by the world. */
   readonly registry: R;
   /** Creates and returns a new entity. */
@@ -195,4 +199,8 @@ export interface World<R extends ComponentRegistry, Res extends ResourceRegistry
   stats(): { entities: number; components: Record<string, number> };
   /** Destroys all entities (firing destroy listeners) and resets the world to an empty state. */
   clear(): void;
+  /** Emits an event, appending it to the buffer for the current frame. */
+  emit<K extends EventType<E>>(type: K, data: EventData<E, K>): void;
+  /** Returns all events of the given type emitted so far this frame. */
+  read<K extends EventType<E>>(type: K): readonly EventData<E, K>[];
 }
