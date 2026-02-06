@@ -47,9 +47,11 @@ export interface ComponentStore<T> {
   remove(entity: EntityId): boolean;
   /** Iterates entity-component pairs. */
   entries(): IterableIterator<[EntityId, T]>;
-  /** Dense entity list in iteration order. */
+  /** Calls callback for each entity-component pair (no generator overhead). */
+  forEachEntry(callback: (entity: EntityId, value: T) => void): void;
+  /** Dense entity list in iteration order (live backing array — do not mutate). */
   entities(): readonly EntityId[];
-  /** Dense component list in iteration order. */
+  /** Dense component list in iteration order (live backing array — do not mutate). */
   values(): readonly T[];
   /** Clears all stored components. */
   clear(): void;
@@ -123,4 +125,16 @@ export interface World<R extends ComponentRegistry> {
     include: Include,
     options?: QueryOptions<R>
   ): Query<R, Include>;
+  /** Clears tracked changes at the start of a frame. */
+  beginFrame(): void;
+  /** Clears tracked changes at the end of a frame. */
+  endFrame(): void;
+  /** Clears all tracked component changes. */
+  flushChanges(): void;
+  /** Returns entities that added the component during the current frame. */
+  getAdded<K extends ComponentType<R>>(type: K): EntityId[];
+  /** Returns entities that removed the component during the current frame. */
+  getRemoved<K extends ComponentType<R>>(type: K): EntityId[];
+  /** Returns entities that updated the component during the current frame. */
+  getUpdated<K extends ComponentType<R>>(type: K): EntityId[];
 }

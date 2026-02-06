@@ -1,6 +1,7 @@
 import type { EntityId } from "./types";
 
-const DEFAULT_ENTITY_CAPACITY = 1_000_000;
+const ENTITY_ID_RADIX = 1_000_000;
+const DEFAULT_ENTITY_CAPACITY = ENTITY_ID_RADIX;
 
 const isSafeInteger = (value: number): boolean =>
   Number.isInteger(value) && value >= 0 && Number.isSafeInteger(value);
@@ -13,13 +14,18 @@ export const makeEntityId = (
   generation: number,
   capacity: number = DEFAULT_ENTITY_CAPACITY
 ): EntityId => {
+  if (!isSafeInteger(capacity) || capacity <= 0 || capacity > ENTITY_ID_RADIX) {
+    throw new Error(
+      `Entity capacity must be a positive safe integer in [1, ${ENTITY_ID_RADIX}]`
+    );
+  }
   if (!isSafeInteger(index) || index >= capacity) {
     throw new Error(`Entity index must be an integer in [0, ${capacity})`);
   }
   if (!isSafeInteger(generation)) {
     throw new Error("Entity generation must be a non-negative safe integer");
   }
-  const id = generation * capacity + index;
+  const id = generation * ENTITY_ID_RADIX + index;
   if (!Number.isSafeInteger(id)) {
     throw new Error("Entity id exceeds safe integer range");
   }
@@ -30,17 +36,15 @@ export const makeEntityId = (
  * Returns the index encoded in an entity id.
  */
 export const getEntityIndex = (
-  entity: EntityId,
-  capacity: number = DEFAULT_ENTITY_CAPACITY
-): number => entity % capacity;
+  entity: EntityId
+): number => entity % ENTITY_ID_RADIX;
 
 /**
  * Returns the generation encoded in an entity id.
  */
 export const getEntityGeneration = (
-  entity: EntityId,
-  capacity: number = DEFAULT_ENTITY_CAPACITY
-): number => Math.floor(entity / capacity);
+  entity: EntityId
+): number => Math.floor(entity / ENTITY_ID_RADIX);
 
 /**
  * Manages entity lifecycle with generation-based ids.
@@ -56,8 +60,10 @@ export class EntityManager {
    * Creates an entity manager with an optional capacity limit.
    */
   constructor(capacity: number = DEFAULT_ENTITY_CAPACITY) {
-    if (!isSafeInteger(capacity) || capacity <= 0) {
-      throw new Error("Entity capacity must be a positive safe integer");
+    if (!isSafeInteger(capacity) || capacity <= 0 || capacity > ENTITY_ID_RADIX) {
+      throw new Error(
+        `Entity capacity must be a positive safe integer in [1, ${ENTITY_ID_RADIX}]`
+      );
     }
     this.capacity = capacity;
   }
@@ -95,8 +101,8 @@ export class EntityManager {
     if (!isSafeInteger(entity)) {
       throw new Error("Entity id must be a non-negative safe integer");
     }
-    const index = getEntityIndex(entity, this.capacity);
-    const generation = getEntityGeneration(entity, this.capacity);
+    const index = getEntityIndex(entity);
+    const generation = getEntityGeneration(entity);
     if (!isSafeInteger(index) || index >= this.capacity) {
       throw new Error("Entity id index is out of range");
     }
@@ -136,7 +142,7 @@ export class EntityManager {
     if (!this.isAlive(entity)) {
       return;
     }
-    const index = getEntityIndex(entity, this.capacity);
+    const index = getEntityIndex(entity);
     this.alive[index] = false;
     this.generations[index] += 1;
     this.free.push(index);
@@ -150,12 +156,12 @@ export class EntityManager {
     if (!isSafeInteger(entity)) {
       return false;
     }
-    const index = getEntityIndex(entity, this.capacity);
+    const index = getEntityIndex(entity);
     if (!isSafeInteger(index) || index >= this.generations.length) {
       return false;
     }
     return this.alive[index] &&
-      this.generations[index] === getEntityGeneration(entity, this.capacity);
+      this.generations[index] === getEntityGeneration(entity);
   }
 
   /**

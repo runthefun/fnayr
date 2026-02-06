@@ -49,6 +49,7 @@ Implement a `SparseSetStore<T>` (or equivalent) for fast add/remove/has/get/iter
   - dense array compaction after removals
   - iterating entities/data in sync
 - `pnpm typecheck` and `pnpm test:run` pass.
+**Status**: Done
 
 ## Task T4 — World Runtime Core (Entities + Components)
 
@@ -74,6 +75,7 @@ Components should be typed per registry and stored in appropriate `SparseSetStor
   - removing entity cleans up components
   - errors or no-ops when accessing dead entities
 - `pnpm typecheck` and `pnpm test:run` pass.
+**Status**: Done
 
 ## Task T5 — Query System (Include/Exclude)
 
@@ -95,6 +97,7 @@ This should be efficient (iterate smallest component store first) but correctnes
   - include + exclude queries
   - entities created/destroyed during runtime
 - `pnpm typecheck` and `pnpm test:run` pass.
+**Status**: Done
 
 ## Task T6 — Change Tracking (Added/Removed/Updated)
 
@@ -115,6 +118,7 @@ Add per-frame change tracking so systems and the editor can react to diffs. Prov
   - updated detection
   - clearing between frames
 - `pnpm typecheck` and `pnpm test:run` pass.
+**Status**: Done
 
 ## Task T7 — Runtime <-> JSON World Bridge
 
@@ -136,6 +140,7 @@ This should use `parseWorld` / `serializeWorld` for validation and preserve unkn
   - handling unknown components when allowed
   - validation error paths surfaced
 - `pnpm typecheck` and `pnpm test:run` pass.
+**Status**: Done
 
 ## Task T8 — Minimal System Runner
 
@@ -156,6 +161,7 @@ This should be deterministic and ready for editor-driven stepping.
   - systems run in insertion order
   - systems can query and mutate the world
 - `pnpm typecheck` and `pnpm test:run` pass.
+**Status**: Done
 
 ## Task T9 — Documentation & Examples
 
@@ -171,3 +177,4 @@ Add concise usage docs for the ECS runtime (entity creation, component add/remov
 - Added to `README.md` or `docs/ecs-runtime.md`.
 - Example code typechecks (if included in tests or a `*.test.ts` sanity check).
 - `pnpm typecheck` and `pnpm test:run` pass.
+**Status**: Done

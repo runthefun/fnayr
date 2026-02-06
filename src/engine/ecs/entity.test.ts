@@ -36,4 +36,15 @@ describe("EntityManager", () => {
     expect(manager.isAlive(first)).toBe(false);
     expect(manager.isAlive(second)).toBe(true);
   });
+
+  it("decodes ids consistently with custom manager capacities", () => {
+    const manager = new EntityManager(3);
+    const first = manager.create();
+    manager.destroy(first);
+    const second = manager.create();
+
+    expect(getEntityIndex(second)).toBe(0);
+    expect(getEntityGeneration(second)).toBe(1);
+    expect(manager.isAlive(second)).toBe(true);
+  });
 });

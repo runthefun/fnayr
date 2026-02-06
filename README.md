@@ -75,3 +75,46 @@ Common patterns:
   - `s.object({}, { allowUnknown: true })`
 - Keep serialization strict but non-destructive:
   - `serializeWorld(registry, world, { stripUnknownComponents: false })`
+
+## ECS Runtime Usage
+
+The runtime ECS API is available under the `ecs` namespace export.
+
+```ts
+import { ecs, s } from "./src/engine";
+
+const registry = {
+  Transform: s.object({ x: s.number() }),
+  Velocity: s.object({ x: s.number() }),
+};
+
+const world = ecs.createWorld(registry);
+const entity = world.createEntity();
+world.addComponent(entity, "Transform", { x: 0 });
+world.addComponent(entity, "Velocity", { x: 2 });
+
+const scheduler = new ecs.Scheduler(world);
+scheduler.addSystem((world, dt) => {
+  for (const { entity, components } of world.query(["Transform", "Velocity"])) {
+    world.addComponent(entity, "Transform", {
+      x: components.Transform.x + components.Velocity.x * dt,
+    });
+  }
+});
+
+world.beginFrame();
+scheduler.runFrame(0.5);
+world.endFrame();
+```
+
+Runtime/JSON bridge helpers:
+
+```ts
+const { world: runtimeWorld, issues } = ecs.worldFromJson(registry, worldJson, {
+  allowUnknownComponents: true,
+});
+
+const serialized = ecs.worldToJson(registry, runtimeWorld, {
+  stripUnknownComponents: false,
+});
+```
