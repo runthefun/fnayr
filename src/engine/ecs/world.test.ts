@@ -688,6 +688,107 @@ describe("World clear / reset", () => {
   });
 });
 
+describe("Batch entity creation (spawn)", () => {
+  const registry = {
+    Transform: s.object({ x: s.number(), y: s.number() }),
+    Name: s.object({ label: s.string() }),
+    Visible: s.tag(),
+  };
+
+  it("spawn creates the requested number of entities", () => {
+    const world = createWorld(registry);
+    const entities = world.spawn(10);
+
+    expect(entities).toHaveLength(10);
+    expect(world.entityCount).toBe(10);
+    for (const e of entities) {
+      expect(world.isAlive(e)).toBe(true);
+    }
+  });
+
+  it("spawn with static component values applies to all entities", () => {
+    const world = createWorld(registry);
+    const entities = world.spawn(5, {
+      Transform: { x: 1, y: 2 },
+    });
+
+    expect(entities).toHaveLength(5);
+    for (const e of entities) {
+      expect(world.hasComponent(e, "Transform")).toBe(true);
+      expect(world.getComponent(e, "Transform")).toEqual({ x: 1, y: 2 });
+    }
+  });
+
+  it("spawn with factory function receives index parameter", () => {
+    const world = createWorld(registry);
+    const entities = world.spawn(3, {
+      Transform: (i) => ({ x: i * 10, y: i * 20 }),
+    });
+
+    expect(entities).toHaveLength(3);
+    expect(world.getComponent(entities[0], "Transform")).toEqual({ x: 0, y: 0 });
+    expect(world.getComponent(entities[1], "Transform")).toEqual({ x: 10, y: 20 });
+    expect(world.getComponent(entities[2], "Transform")).toEqual({ x: 20, y: 40 });
+  });
+
+  it("spawn with multiple component types", () => {
+    const world = createWorld(registry);
+    const entities = world.spawn(2, {
+      Transform: (i) => ({ x: i, y: i }),
+      Name: { label: "unit" },
+      Visible: true as any,
+    });
+
+    expect(entities).toHaveLength(2);
+    for (const e of entities) {
+      expect(world.hasComponent(e, "Transform")).toBe(true);
+      expect(world.hasComponent(e, "Name")).toBe(true);
+      expect(world.hasComponent(e, "Visible")).toBe(true);
+      expect(world.getComponent(e, "Name")).toEqual({ label: "unit" });
+      expect(world.getComponent(e, "Visible")).toBe(true);
+    }
+    expect(world.getComponent(entities[0], "Transform")).toEqual({ x: 0, y: 0 });
+    expect(world.getComponent(entities[1], "Transform")).toEqual({ x: 1, y: 1 });
+  });
+
+  it("spawn records all entities as added in change tracking", () => {
+    const world = createWorld(registry);
+    world.beginFrame();
+
+    const entities = world.spawn(3, {
+      Transform: { x: 0, y: 0 },
+    });
+
+    const added = world.getAdded("Transform");
+    expect(added.size).toBe(3);
+    for (const e of entities) {
+      expect(added.has(e)).toBe(true);
+    }
+  });
+
+  it("spawn with count 0 returns empty array", () => {
+    const world = createWorld(registry);
+    const entities = world.spawn(0, {
+      Transform: { x: 1, y: 1 },
+    });
+
+    expect(entities).toHaveLength(0);
+    expect(world.entityCount).toBe(0);
+  });
+
+  it("spawn without factories creates bare entities", () => {
+    const world = createWorld(registry);
+    const entities = world.spawn(3);
+
+    expect(entities).toHaveLength(3);
+    for (const e of entities) {
+      expect(world.isAlive(e)).toBe(true);
+      expect(world.hasComponent(e, "Transform")).toBe(false);
+      expect(world.hasComponent(e, "Name")).toBe(false);
+    }
+  });
+});
+
 describe("Entity count and debug stats", () => {
   const registry = {
     Transform: s.object({ x: s.number() }),

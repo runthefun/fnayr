@@ -571,6 +571,35 @@ export class EcsWorld<
   }
 
   /**
+   * Creates `count` entities, each receiving components from the factories map.
+   * Factory values can be static data or functions (index) => data.
+   * Returns the created EntityIds.
+   */
+  spawn(
+    count: number,
+    factories?: {
+      [K in ComponentType<R>]?: ComponentData<R, K> | ((index: number) => ComponentData<R, K>);
+    }
+  ): EntityId[] {
+    const entities: EntityId[] = [];
+    for (let i = 0; i < count; i++) {
+      const entity = this.createEntity();
+      entities.push(entity);
+      if (factories) {
+        for (const type of Object.keys(factories) as ComponentType<R>[]) {
+          const factoryOrValue = factories[type];
+          const data =
+            typeof factoryOrValue === "function"
+              ? (factoryOrValue as (index: number) => ComponentData<R, typeof type>)(i)
+              : (factoryOrValue as ComponentData<R, typeof type>);
+          this.addComponent(entity, type, data);
+        }
+      }
+    }
+    return entities;
+  }
+
+  /**
    * Number of alive entities.
    */
   get entityCount(): number {

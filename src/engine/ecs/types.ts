@@ -199,6 +199,13 @@ export interface World<R extends ComponentRegistry, Res extends ResourceRegistry
   stats(): { entities: number; components: Record<string, number> };
   /** Destroys all entities (firing destroy listeners) and resets the world to an empty state. */
   clear(): void;
+  /** Creates `count` entities, each receiving components from the factories map. Returns the created EntityIds. */
+  spawn(
+    count: number,
+    factories?: {
+      [K in ComponentType<R>]?: ComponentData<R, K> | ((index: number) => ComponentData<R, K>);
+    }
+  ): EntityId[];
   /** Emits an event, appending it to the buffer for the current frame. */
   emit<K extends EventType<E>>(type: K, data: EventData<E, K>): void;
   /** Returns all events of the given type emitted so far this frame. */
