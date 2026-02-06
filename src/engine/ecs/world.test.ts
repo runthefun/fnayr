@@ -107,6 +107,65 @@ describe("EcsWorld", () => {
     expect(world.getComponent(entity, "Transform")).toBeUndefined();
   });
 
+  it("getMut returns the same reference as getComponent", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 5 });
+    world.beginFrame();
+
+    const ref = world.getComponent(entity, "Transform");
+    const mutRef = world.getMut(entity, "Transform");
+    expect(mutRef).toBe(ref);
+  });
+
+  it("mutating the getMut reference is visible via getComponent", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 1 });
+    world.beginFrame();
+
+    const mutRef = world.getMut(entity, "Transform");
+    mutRef!.x = 99;
+
+    expect(world.getComponent(entity, "Transform")).toEqual({ x: 99 });
+  });
+
+  it("getMut marks the component as updated in change tracking", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 1 });
+    world.beginFrame();
+
+    world.getMut(entity, "Transform");
+
+    expect(world.getUpdated("Transform")).toContain(entity);
+  });
+
+  it("getMut on a same-frame-added component does not double-record as updated", () => {
+    const world = createWorld(registry);
+    world.beginFrame();
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 1 });
+
+    world.getMut(entity, "Transform");
+
+    expect(world.getAdded("Transform")).toContain(entity);
+    expect(world.getUpdated("Transform")).not.toContain(entity);
+  });
+
+  it("getMut returns undefined for dead entities and missing components", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 1 });
+
+    // Missing component
+    expect(world.getMut(entity, "Name")).toBeUndefined();
+
+    // Dead entity
+    world.destroyEntity(entity);
+    expect(world.getMut(entity, "Transform")).toBeUndefined();
+  });
+
   it("change tracking still records removals for destroyed entity components", () => {
     const world = createWorld(registry);
     world.beginFrame();

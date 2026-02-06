@@ -133,6 +133,27 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
   }
 
   /**
+   * Returns the component for in-place mutation and marks it as updated in change tracking.
+   */
+  getMut<K extends ComponentType<R>>(
+    entity: number,
+    type: K
+  ): ComponentData<R, K> | undefined {
+    if (!this.entityManager.isAlive(entity)) {
+      return undefined;
+    }
+    const store = this.stores.get(type);
+    if (!store) {
+      return undefined;
+    }
+    const value = store.get(entity) as ComponentData<R, K> | undefined;
+    if (value !== undefined) {
+      this.recordUpdated(type, entity);
+    }
+    return value;
+  }
+
+  /**
    * Returns true if the entity has the component.
    */
   hasComponent<K extends ComponentType<R>>(entity: number, type: K): boolean {

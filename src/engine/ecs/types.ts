@@ -118,6 +118,11 @@ export interface World<R extends ComponentRegistry> {
     entity: EntityId,
     type: K
   ): ComponentData<R, K> | undefined;
+  /** Returns the component for in-place mutation and marks it as updated in change tracking. */
+  getMut<K extends ComponentType<R>>(
+    entity: EntityId,
+    type: K
+  ): ComponentData<R, K> | undefined;
   /** Returns true if the entity has the component. */
   hasComponent<K extends ComponentType<R>>(entity: EntityId, type: K): boolean;
   /** Creates a query for entities that include the given components. */
