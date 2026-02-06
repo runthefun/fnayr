@@ -75,4 +75,52 @@ describe("EcsWorld", () => {
     world.destroyEntity(second);
     expect(destroyed).toEqual([first]);
   });
+
+  it("destroy listeners can access components on the entity being destroyed", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 42 });
+    world.addComponent(entity, "Name", { label: "Hero" });
+
+    let observedAlive = false;
+    let observedTransform: { x: number } | undefined;
+    let observedHasTransform = false;
+    let observedHasName = false;
+
+    world.onEntityDestroyed((e) => {
+      observedAlive = world.isAlive(e);
+      observedTransform = world.getComponent(e, "Transform");
+      observedHasTransform = world.hasComponent(e, "Transform");
+      observedHasName = world.hasComponent(e, "Name");
+    });
+
+    world.destroyEntity(entity);
+
+    expect(observedAlive).toBe(true);
+    expect(observedTransform).toEqual({ x: 42 });
+    expect(observedHasTransform).toBe(true);
+    expect(observedHasName).toBe(true);
+
+    // After destruction, entity is dead and components are gone
+    expect(world.isAlive(entity)).toBe(false);
+    expect(world.hasComponent(entity, "Transform")).toBe(false);
+    expect(world.getComponent(entity, "Transform")).toBeUndefined();
+  });
+
+  it("change tracking still records removals for destroyed entity components", () => {
+    const world = createWorld(registry);
+    world.beginFrame();
+
+    const entity = world.createEntity();
+    world.addComponent(entity, "Transform", { x: 1 });
+    world.addComponent(entity, "Name", { label: "Test" });
+
+    // Flush the adds so they don't interfere
+    world.beginFrame();
+
+    world.destroyEntity(entity);
+
+    expect(world.getRemoved("Transform")).toContain(entity);
+    expect(world.getRemoved("Name")).toContain(entity);
+  });
 });

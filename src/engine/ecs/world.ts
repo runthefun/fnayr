@@ -49,10 +49,14 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
 
   /**
    * Destroys an entity and removes all attached components.
+   * Listeners fire first while the entity is still alive and components are accessible.
    */
   destroyEntity(entity: number): void {
     if (!this.entityManager.isAlive(entity)) {
       return;
+    }
+    for (const listener of this.destroyListeners) {
+      listener(entity);
     }
     for (const [type, store] of this.stores) {
       if (store.remove(entity)) {
@@ -60,9 +64,6 @@ export class EcsWorld<R extends ComponentRegistry> implements World<R> {
       }
     }
     this.entityManager.destroy(entity);
-    for (const listener of this.destroyListeners) {
-      listener(entity);
-    }
   }
 
   /**
