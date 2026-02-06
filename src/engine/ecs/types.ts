@@ -113,6 +113,17 @@ export interface Query<
 }
 
 /**
+ * Cached query that incrementally maintains its matched entity set.
+ */
+export interface CachedQuery<
+  R extends ComponentRegistry,
+  Include extends readonly ComponentType<R>[],
+> extends Query<R, Include> {
+  /** Number of matched entities. */
+  readonly size: number;
+}
+
+/**
  * World interface combining entities and component storage.
  */
 export interface World<R extends ComponentRegistry, Res extends ResourceRegistry = {}> {
@@ -151,6 +162,11 @@ export interface World<R extends ComponentRegistry, Res extends ResourceRegistry
     include: Include,
     options?: QueryOptions<R>
   ): Query<R, Include>;
+  /** Creates a cached query that incrementally tracks matched entities. */
+  createQuery<Include extends readonly ComponentType<R>[]>(
+    include: Include,
+    options?: QueryOptions<R>
+  ): CachedQuery<R, Include>;
   /** Clears tracked changes at the start of a frame. */
   beginFrame(): void;
   /** Clears tracked changes at the end of a frame. */

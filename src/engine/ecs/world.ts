@@ -1,7 +1,9 @@
 import type {
+  CachedQuery,
   ComponentData,
   ComponentRegistry,
   ComponentType,
+  EntityId,
   Query,
   QueryOptions,
   ResourceData,
@@ -15,6 +17,136 @@ import { getDefault } from "../schema";
 
 const hasOwn = (value: object, key: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
+
+/**
+ * Internal cached query implementation that incrementally tracks matched entities.
+ */
+class CachedQueryImpl<
+  R extends ComponentRegistry,
+  Include extends readonly ComponentType<R>[],
+> implements CachedQuery<R, Include>
+{
+  readonly include: Include;
+  readonly exclude: readonly ComponentType<R>[];
+  private readonly includeSet: Set<string>;
+  private readonly excludeSet: Set<string>;
+  readonly matched = new Set<EntityId>();
+  private readonly world: EcsWorld<R, any>;
+
+  constructor(
+    world: EcsWorld<R, any>,
+    include: Include,
+    exclude: readonly ComponentType<R>[]
+  ) {
+    this.world = world;
+    this.include = include;
+    this.exclude = exclude;
+    this.includeSet = new Set(include as readonly string[]);
+    this.excludeSet = new Set(exclude as readonly string[]);
+
+    // Build initial matched set by scanning existing entities
+    this.buildInitialSet();
+  }
+
+  get size(): number {
+    return this.matched.size;
+  }
+
+  *[Symbol.iterator](): IterableIterator<{
+    entity: EntityId;
+    components: { [K in Include[number]]: ComponentData<R, K> };
+  }> {
+    const snapshot = Array.from(this.matched);
+    for (const entity of snapshot) {
+      if (!this.matched.has(entity)) {
+        continue;
+      }
+      const components = {} as {
+        [K in Include[number]]: ComponentData<R, K>;
+      };
+      for (const type of this.include) {
+        components[type] = this.world.getComponent(entity, type)!;
+      }
+      yield { entity, components };
+    }
+  }
+
+  /** Check if a component type is relevant to this query. */
+  isRelevantType(type: string): boolean {
+    return this.includeSet.has(type) || this.excludeSet.has(type);
+  }
+
+  /** Called when a component is added to an entity. Re-evaluate match. */
+  onComponentAdded(entity: EntityId, type: string): void {
+    if (!this.isRelevantType(type)) return;
+
+    if (this.excludeSet.has(type)) {
+      // An excluded component was added — remove from matched
+      this.matched.delete(entity);
+      return;
+    }
+
+    // An included component was added — check if entity now fully matches
+    if (this.entityMatches(entity)) {
+      this.matched.add(entity);
+    }
+  }
+
+  /** Called when a component is removed from an entity. Re-evaluate match. */
+  onComponentRemoved(entity: EntityId, type: string): void {
+    if (!this.isRelevantType(type)) return;
+
+    if (this.includeSet.has(type)) {
+      // A required component was removed — entity can't match
+      this.matched.delete(entity);
+      return;
+    }
+
+    // An excluded component was removed — check if entity now matches
+    if (this.entityMatches(entity)) {
+      this.matched.add(entity);
+    }
+  }
+
+  /** Called when an entity is destroyed. */
+  onEntityDestroyed(entity: EntityId): void {
+    this.matched.delete(entity);
+  }
+
+  private entityMatches(entity: EntityId): boolean {
+    for (const type of this.include) {
+      if (!this.world.hasComponent(entity, type)) {
+        return false;
+      }
+    }
+    for (const type of this.exclude) {
+      if (this.world.hasComponent(entity, type)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private buildInitialSet(): void {
+    if (this.include.length === 0) {
+      // Match all entities that don't have excluded components
+      this.world.forEachEntity((entity) => {
+        if (this.entityMatches(entity)) {
+          this.matched.add(entity);
+        }
+      });
+      return;
+    }
+
+    // Use the on-demand query to build the initial set
+    const q = this.world.query(this.include, {
+      exclude: this.exclude.length > 0 ? this.exclude : undefined,
+    });
+    for (const { entity } of q) {
+      this.matched.add(entity);
+    }
+  }
+}
 
 /**
  * Runtime ECS world composed of entities and component stores.
@@ -32,6 +164,7 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
     { added: Set<number>; removed: Set<number>; updated: Set<number> }
   >();
   private readonly resources = new Map<string, unknown>();
+  private readonly cachedQueries: CachedQueryImpl<R, readonly ComponentType<R>[]>[] = [];
 
   /**
    * Creates a new ECS world for the given registry.
@@ -75,6 +208,7 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
         this.recordRemoved(type, entity);
       }
     }
+    this.notifyCachedQueriesDestroyed(entity);
     this.entityManager.destroy(entity);
   }
 
@@ -115,6 +249,7 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
       this.recordUpdated(type, entity);
     } else {
       this.recordAdded(type, entity);
+      this.notifyCachedQueriesAdded(entity, type);
     }
   }
 
@@ -131,6 +266,7 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
     }
     if (store.remove(entity)) {
       this.recordRemoved(type, entity);
+      this.notifyCachedQueriesRemoved(entity, type);
     }
   }
 
@@ -294,6 +430,29 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
   }
 
   /**
+   * Creates a cached query that incrementally tracks matched entities.
+   */
+  createQuery<Include extends readonly ComponentType<R>[]>(
+    include: Include,
+    options?: QueryOptions<R>
+  ): CachedQuery<R, Include> {
+    const exclude = options?.exclude ?? [];
+
+    for (const type of include) {
+      this.assertRegistered(type);
+    }
+    for (const type of exclude) {
+      this.assertRegistered(type);
+    }
+
+    const cached = new CachedQueryImpl<R, Include>(this, include, exclude);
+    this.cachedQueries.push(
+      cached as unknown as CachedQueryImpl<R, readonly ComponentType<R>[]>
+    );
+    return cached;
+  }
+
+  /**
    * Clears tracked changes at the start of a frame.
    */
   beginFrame(): void {
@@ -426,6 +585,11 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
       store.clear();
     }
 
+    // Clear all cached query matched sets
+    for (const cq of this.cachedQueries) {
+      cq.matched.clear();
+    }
+
     // Reset entity manager
     this.entityManager.reset();
 
@@ -501,6 +665,24 @@ export class EcsWorld<R extends ComponentRegistry, Res extends ResourceRegistry 
       return;
     }
     changeSet.updated.add(entity);
+  }
+
+  private notifyCachedQueriesAdded(entity: EntityId, type: ComponentType<R>): void {
+    for (const cq of this.cachedQueries) {
+      cq.onComponentAdded(entity, type);
+    }
+  }
+
+  private notifyCachedQueriesRemoved(entity: EntityId, type: ComponentType<R>): void {
+    for (const cq of this.cachedQueries) {
+      cq.onComponentRemoved(entity, type);
+    }
+  }
+
+  private notifyCachedQueriesDestroyed(entity: EntityId): void {
+    for (const cq of this.cachedQueries) {
+      cq.onEntityDestroyed(entity);
+    }
   }
 
   private getStore<K extends ComponentType<R>>(
