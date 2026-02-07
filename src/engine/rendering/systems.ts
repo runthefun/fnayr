@@ -20,7 +20,7 @@ function createGeometry(
   }
 }
 
-function applyTransform(
+export function applyTransform(
   obj: THREE.Object3D,
   data: { position: number[]; rotation: number[]; scale: number[] }
 ): void {
@@ -35,19 +35,13 @@ function applyTransform(
 }
 
 /**
- * Creates a system that synchronizes ECS MeshRenderer/Transform3D components
+ * Creates a system that synchronizes ECS MeshRenderer components
  * into the Three.js scene graph managed by the given binding.
  */
 export function createRenderSyncSystem<R extends RenderRegistry>(
   binding: ThreeBinding<R>,
-  options?: { shouldSkipTransform?: (entity: number) => boolean }
 ): System<R> {
-  const shouldSkipTransform = options?.shouldSkipTransform;
-  const handledThisFrame = new Set<number>();
-
   return (world: World<R>, _dt: number, _commands: Commands<R>) => {
-    handledThisFrame.clear();
-
     // 1. Added MeshRenderer — create mesh and add to scene
     for (const entity of world.getAdded("MeshRenderer" as any)) {
       const mr = world.getComponent(entity, "MeshRenderer" as any) as any;
@@ -62,6 +56,7 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
       const mesh = new THREE.Mesh(geometry, material);
       mesh.userData.entityId = entity;
 
+      // Apply initial transform if present
       const transform = world.getComponent(entity, "Transform3D" as any) as any;
       if (transform) {
         applyTransform(mesh, transform);
@@ -69,7 +64,6 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
 
       binding.set(entity, mesh);
       binding.scene.add(mesh);
-      handledThisFrame.add(entity);
     }
 
     // 2. Removed MeshRenderer — remove from scene
@@ -77,25 +71,7 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
       binding.delete(entity);
     }
 
-    // 3. Updated/Added Transform3D — sync transform
-    for (const entity of world.getAdded("Transform3D" as any)) {
-      if (handledThisFrame.has(entity)) continue;
-      if (shouldSkipTransform?.(entity)) continue;
-      const obj = binding.get(entity);
-      if (!obj) continue;
-      const transform = world.getComponent(entity, "Transform3D" as any) as any;
-      if (transform) applyTransform(obj, transform);
-    }
-    for (const entity of world.getUpdated("Transform3D" as any)) {
-      if (handledThisFrame.has(entity)) continue;
-      if (shouldSkipTransform?.(entity)) continue;
-      const obj = binding.get(entity);
-      if (!obj) continue;
-      const transform = world.getComponent(entity, "Transform3D" as any) as any;
-      if (transform) applyTransform(obj, transform);
-    }
-
-    // 4. Updated MeshRenderer — update material/geometry
+    // 3. Updated MeshRenderer — update material/geometry
     for (const entity of world.getUpdated("MeshRenderer" as any)) {
       const obj = binding.get(entity);
       if (!obj || !(obj instanceof THREE.Mesh)) continue;
@@ -119,6 +95,60 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
         obj.geometry.dispose();
         obj.geometry = createGeometry(mr.geometry);
       }
+    }
+  };
+}
+
+/**
+ * Creates a system that synchronizes Transform3D components to the
+ * Three.js Object3D transform for any entity present in the binding.
+ *
+ * Run this AFTER visual-creation systems (renderSync, lightSync) so
+ * that the Object3D already exists in the binding.
+ */
+export function createTransformSyncSystem<R extends RenderRegistry>(
+  binding: ThreeBinding<R>,
+  options?: {
+    shouldSkipTransform?: (entity: number) => boolean;
+    hierarchy?: { getParent(entity: number): number | undefined };
+  },
+): System<R> {
+  const shouldSkipTransform = options?.shouldSkipTransform;
+  const hierarchy = options?.hierarchy;
+
+  return (world: World<R>, _dt: number, _commands: Commands<R>) => {
+    // 1. Sync Transform3D → Object3D position/rotation/scale
+    for (const entity of world.getAdded("Transform3D" as any)) {
+      if (shouldSkipTransform?.(entity)) continue;
+      const obj = binding.get(entity);
+      if (!obj) continue;
+      const transform = world.getComponent(entity, "Transform3D" as any) as any;
+      if (transform) applyTransform(obj, transform);
+    }
+    for (const entity of world.getUpdated("Transform3D" as any)) {
+      if (shouldSkipTransform?.(entity)) continue;
+      const obj = binding.get(entity);
+      if (!obj) continue;
+      const transform = world.getComponent(entity, "Transform3D" as any) as any;
+      if (transform) applyTransform(obj, transform);
+    }
+
+    // 2. Sync hierarchy parenting
+    if (hierarchy) {
+      binding.forEach((entity, obj) => {
+        const ecsParent = hierarchy.getParent(entity);
+        if (ecsParent !== undefined) {
+          const parentObj = binding.get(ecsParent);
+          if (parentObj && obj.parent !== parentObj) {
+            parentObj.add(obj); // Three.js handles removing from old parent
+          }
+        } else {
+          // Should be a root — parent should be the scene
+          if (obj.parent !== binding.scene) {
+            binding.scene.add(obj);
+          }
+        }
+      });
     }
   };
 }

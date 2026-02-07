@@ -4,34 +4,27 @@ import { createWorld } from "../ecs/world";
 import { CommandBuffer } from "../ecs/commands";
 import { renderingRegistry } from "./components";
 import { ThreeBinding } from "./binding";
-import { createRenderSyncSystem } from "./systems";
+import { createRenderSyncSystem, createTransformSyncSystem } from "./systems";
 
 describe("Rendering bridge", () => {
   function setup() {
     const world = createWorld(renderingRegistry);
     const binding = new ThreeBinding(world);
-    const syncSystem = createRenderSyncSystem(binding);
+    const renderSync = createRenderSyncSystem(binding);
+    const transformSync = createTransformSyncSystem(binding);
 
-    /** Run the sync system within a frame (beginFrame → system → endFrame). */
-    function runSync() {
-      world.beginFrame();
-      const cmds = new CommandBuffer(world);
-      syncSystem(world, 0, cmds);
-      cmds.flush();
-      world.endFrame();
-    }
-
-    /** Begin a frame, run a setup callback, then execute the sync system, then end the frame. */
+    /** Begin a frame, run a setup callback, then execute sync systems, then end the frame. */
     function frame(fn?: () => void) {
       world.beginFrame();
       fn?.();
       const cmds = new CommandBuffer(world);
-      syncSystem(world, 0, cmds);
+      renderSync(world, 0, cmds);
+      transformSync(world, 0, cmds);
       cmds.flush();
       world.endFrame();
     }
 
-    return { world, binding, syncSystem, runSync, frame };
+    return { world, binding, frame };
   }
 
   it("MeshRenderer added → Mesh appears in scene", () => {

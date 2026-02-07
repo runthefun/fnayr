@@ -53,8 +53,34 @@ export const Spin = defineSchema(
   })
 );
 
+export const DirectionalLight = defineSchema(
+  s.object({
+    color: colorTuple,
+    intensity: s.number({ default: 1, min: 0 }),
+  })
+);
+
+export const AmbientLight = defineSchema(
+  s.object({
+    color: colorTuple,
+    intensity: s.number({ default: 1, min: 0 }),
+  })
+);
+
+export const PointLight = defineSchema(
+  s.object({
+    color: colorTuple,
+    intensity: s.number({ default: 1, min: 0 }),
+    distance: s.number({ default: 0, min: 0 }),
+    decay: s.number({ default: 2, min: 0 }),
+  })
+);
+
 export const renderingRegistry = {
   Transform3D,
   MeshRenderer,
   Spin,
+  DirectionalLight,
+  AmbientLight,
+  PointLight,
 } as const;

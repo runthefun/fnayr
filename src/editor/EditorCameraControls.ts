@@ -158,6 +158,25 @@ export class EditorCameraControls {
     this.camera.lookAt(this.target);
   }
 
+  /** Snap the camera to frame the given object. */
+  focusOnObject(obj: THREE.Object3D): void {
+    const box = new THREE.Box3().setFromObject(obj);
+
+    if (box.isEmpty()) {
+      // No geometry (e.g. lights) — use the object's world position directly
+      obj.getWorldPosition(this.target);
+      this.spherical.radius = 2;
+    } else {
+      const sphere = new THREE.Sphere();
+      box.getBoundingSphere(sphere);
+      this.target.copy(sphere.center);
+      this.spherical.radius = Math.max(
+        this.minRadius,
+        sphere.radius * 2.5,
+      );
+    }
+  }
+
   // --- Lifecycle ---
 
   attach() {

@@ -3,6 +3,7 @@ import { EditorContext } from "./EditorContext";
 import type { EditorContextValue } from "./EditorContext";
 import { createEditorSession, type EditorSession } from "./setup";
 import { Viewport } from "./Viewport";
+import { Toolbar } from "./Toolbar";
 import { EntityTree } from "./EntityTree";
 import { Inspector } from "./Inspector";
 
@@ -28,6 +29,7 @@ export function EditorApp() {
     hierarchy: session.hierarchy,
     binding: session.binding,
     gizmo: session.gizmo,
+    controls: session.controls,
   };
 
   return (
@@ -35,6 +37,7 @@ export function EditorApp() {
       <div className="w-screen h-screen flex">
         <Viewport session={session} />
         <div className="w-[280px] flex flex-col border-l border-subtle bg-panel">
+          <Toolbar />
           <div className="max-h-[40%] overflow-y-auto border-b border-subtle">
             <EntityTree />
           </div>

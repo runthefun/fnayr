@@ -54,6 +54,10 @@ export class ThreeBinding<
     return this.objectOf.has(entity);
   }
 
+  forEach(fn: (entity: EntityId, obj: THREE.Object3D) => void): void {
+    this.objectOf.forEach((obj, entity) => fn(entity, obj));
+  }
+
   dispose(): void {
     this.unsubscribe();
   }

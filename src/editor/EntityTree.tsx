@@ -12,6 +12,20 @@ export function EntityTree() {
   // Build root entities (no parent)
   const roots = entities.filter((e) => hierarchy.getParent(e) === undefined);
 
+  function handleCreateEntity() {
+    const entity = world.createEntity();
+    world.setComponent(entity, "Transform3D", {
+      position: [0, 0, 0],
+      rotation: [0, 0, 0, 1],
+      scale: [1, 1, 1],
+    });
+    store.selectEntity(entity);
+  }
+
+  function handleDeleteEntity(entity: number) {
+    world.destroyEntity(entity);
+  }
+
   function renderEntity(entity: number, depth: number) {
     const children = hierarchy.getChildren(entity);
     const isSelected = entity === selectedEntity;
@@ -24,20 +38,24 @@ export function EntityTree() {
 
     return (
       <div key={entity}>
-        <button
-          onClick={() => store.selectEntity(entity)}
-          className={`w-full text-left px-2 py-1 flex items-center gap-1.5 hover:bg-surface cursor-pointer ${
+        <div
+          className={`w-full text-left px-2 py-1 flex items-center gap-1.5 hover:bg-surface ${
             isSelected ? "bg-selected" : ""
           }`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
         >
-          <span className="text-muted text-[10px] shrink-0">
-            {entity}
-          </span>
-          <span className="truncate">
-            Entity {entity}
-          </span>
-          <span className="ml-auto flex gap-0.5 shrink-0">
+          <button
+            onClick={() => store.selectEntity(entity)}
+            className="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer"
+          >
+            <span className="text-muted text-[10px] shrink-0">
+              {entity}
+            </span>
+            <span className="truncate">
+              Entity {entity}
+            </span>
+          </button>
+          <span className="flex gap-0.5 shrink-0 items-center">
             {components.map((c) => (
               <span
                 key={c}
@@ -46,8 +64,18 @@ export function EntityTree() {
                 {c}
               </span>
             ))}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteEntity(entity);
+              }}
+              className="text-muted hover:text-primary text-[10px] ml-1 cursor-pointer"
+              title="Delete entity"
+            >
+              x
+            </button>
           </span>
-        </button>
+        </div>
         {children.map((child) => renderEntity(child as number, depth + 1))}
       </div>
     );
@@ -55,8 +83,15 @@ export function EntityTree() {
 
   return (
     <div>
-      <div className="px-2 py-1.5 text-muted font-medium uppercase tracking-wider text-[10px] border-b border-subtle">
-        Entities
+      <div className="px-2 py-1.5 text-muted font-medium uppercase tracking-wider text-[10px] border-b border-subtle flex items-center justify-between">
+        <span>Entities</span>
+        <button
+          onClick={handleCreateEntity}
+          className="text-muted hover:text-primary text-sm leading-none cursor-pointer"
+          title="Create entity"
+        >
+          +
+        </button>
       </div>
       {roots.map((entity) => renderEntity(entity, 0))}
     </div>

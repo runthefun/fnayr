@@ -5,6 +5,7 @@ import type { Hierarchy } from "../engine/ecs/hierarchy";
 import type { EcsWorld } from "../engine/ecs/world";
 import type { renderingRegistry } from "../engine/rendering/components";
 import type { GizmoManager } from "./GizmoManager";
+import type { EditorCameraControls } from "./EditorCameraControls";
 
 type Registry = typeof renderingRegistry;
 
@@ -14,6 +15,7 @@ export type EditorContextValue = {
   hierarchy: Hierarchy<Registry>;
   binding: ThreeBinding<Registry>;
   gizmo: GizmoManager;
+  controls: EditorCameraControls;
 };
 
 export const EditorContext = createContext<EditorContextValue | null>(null);

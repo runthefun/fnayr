@@ -26,13 +26,16 @@ export function Viewport({ session }: Props) {
     const container = containerRef.current;
     if (!container) return;
 
-    container.appendChild(canvasRef.current);
+    const canvas = canvasRef.current;
+    canvas.style.display = "block";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    container.appendChild(canvas);
     resize();
 
     const ro = new ResizeObserver(resize);
     ro.observe(container);
 
-    const canvas = canvasRef.current;
     const { gizmo, controls } = session;
     let gizmoActive = false;
 
@@ -80,6 +83,14 @@ export function Viewport({ session }: Props) {
         case "r":
           gizmo.setMode("scale");
           break;
+        case "f": {
+          const sel = session.store.getSelectedEntity();
+          if (sel != null) {
+            const obj = session.binding.get(sel);
+            if (obj) session.controls.focusOnObject(obj);
+          }
+          break;
+        }
       }
     };
 
