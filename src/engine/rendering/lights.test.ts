@@ -12,11 +12,12 @@ type R = typeof renderingRegistry;
 
 function setup() {
   const world = createWorld(renderingRegistry);
-  const binding = new ThreeBinding(world);
+  const scene = new THREE.Scene();
+  const binding = new ThreeBinding(world, scene);
   const commands = new CommandBuffer(world);
-  const lightSync = createLightSyncSystem(binding);
+  const lightSync = createLightSyncSystem(scene);
   const transformSync = createTransformSyncSystem(binding);
-  return { world, binding, commands, lightSync, transformSync };
+  return { world, scene, binding, commands, lightSync, transformSync };
 }
 
 function runFrame(ctx: ReturnType<typeof setup>, fn?: () => void) {
@@ -28,8 +29,20 @@ function runFrame(ctx: ReturnType<typeof setup>, fn?: () => void) {
   ctx.world.endFrame();
 }
 
+/** Find a Three.js object in the scene by entity ID and optional type */
+function findInScene<T extends THREE.Object3D>(
+  scene: THREE.Scene,
+  entity: number,
+  type?: new (...args: any[]) => T
+): T | undefined {
+  return scene.children.find(
+    (c) =>
+      c.userData.entityId === entity && (type ? c instanceof type : true)
+  ) as T | undefined;
+}
+
 describe("Light sync system", () => {
-  it("DirectionalLight added → THREE.DirectionalLight appears in scene", () => {
+  it("DirectionalLight added -> THREE.DirectionalLight appears in scene", () => {
     const ctx = setup();
     const entity = ctx.world.createEntity();
 
@@ -40,12 +53,12 @@ describe("Light sync system", () => {
       });
     });
 
-    const light = ctx.binding.get(entity);
+    const light = findInScene(ctx.scene, entity, THREE.DirectionalLight);
     expect(light).toBeInstanceOf(THREE.DirectionalLight);
-    expect((light as THREE.DirectionalLight).intensity).toBe(1.5);
-    expect((light as THREE.DirectionalLight).color.r).toBe(1);
-    expect((light as THREE.DirectionalLight).color.g).toBe(1);
-    expect((light as THREE.DirectionalLight).color.b).toBe(1);
+    expect(light!.intensity).toBe(1.5);
+    expect(light!.color.r).toBe(1);
+    expect(light!.color.g).toBe(1);
+    expect(light!.color.b).toBe(1);
   });
 
   it("DirectionalLight has a DirectionalLightHelper on the editor layer", () => {
@@ -56,7 +69,7 @@ describe("Light sync system", () => {
       ctx.world.setComponent(entity, "DirectionalLight");
     });
 
-    const helper = ctx.binding.scene.children.find(
+    const helper = ctx.scene.children.find(
       (c) => c instanceof THREE.DirectionalLightHelper
     );
     expect(helper).toBeInstanceOf(THREE.DirectionalLightHelper);
@@ -65,7 +78,7 @@ describe("Light sync system", () => {
     expect(helper!.layers.isEnabled(0)).toBe(false);
   });
 
-  it("AmbientLight added → THREE.AmbientLight appears in scene", () => {
+  it("AmbientLight added -> THREE.AmbientLight appears in scene", () => {
     const ctx = setup();
     const entity = ctx.world.createEntity();
 
@@ -76,12 +89,12 @@ describe("Light sync system", () => {
       });
     });
 
-    const light = ctx.binding.get(entity);
+    const light = findInScene(ctx.scene, entity, THREE.AmbientLight);
     expect(light).toBeInstanceOf(THREE.AmbientLight);
-    expect((light as THREE.AmbientLight).intensity).toBe(2);
-    expect((light as THREE.AmbientLight).color.r).toBeCloseTo(0.25);
-    expect((light as THREE.AmbientLight).color.g).toBeCloseTo(0.25);
-    expect((light as THREE.AmbientLight).color.b).toBeCloseTo(0.25);
+    expect(light!.intensity).toBe(2);
+    expect(light!.color.r).toBeCloseTo(0.25);
+    expect(light!.color.g).toBeCloseTo(0.25);
+    expect(light!.color.b).toBeCloseTo(0.25);
   });
 
   it("AmbientLight has no helper in the scene", () => {
@@ -92,7 +105,7 @@ describe("Light sync system", () => {
       ctx.world.setComponent(entity, "AmbientLight");
     });
 
-    const helpers = ctx.binding.scene.children.filter(
+    const helpers = ctx.scene.children.filter(
       (c) =>
         c instanceof THREE.DirectionalLightHelper ||
         c instanceof THREE.PointLightHelper
@@ -100,7 +113,7 @@ describe("Light sync system", () => {
     expect(helpers).toHaveLength(0);
   });
 
-  it("PointLight added → THREE.PointLight appears in scene", () => {
+  it("PointLight added -> THREE.PointLight appears in scene", () => {
     const ctx = setup();
     const entity = ctx.world.createEntity();
 
@@ -113,7 +126,7 @@ describe("Light sync system", () => {
       });
     });
 
-    const light = ctx.binding.get(entity) as THREE.PointLight;
+    const light = findInScene(ctx.scene, entity, THREE.PointLight)!;
     expect(light).toBeInstanceOf(THREE.PointLight);
     expect(light.intensity).toBe(3);
     expect(light.distance).toBe(10);
@@ -131,7 +144,7 @@ describe("Light sync system", () => {
       ctx.world.setComponent(entity, "PointLight");
     });
 
-    const helper = ctx.binding.scene.children.find(
+    const helper = ctx.scene.children.find(
       (c) => c instanceof THREE.PointLightHelper
     );
     expect(helper).toBeInstanceOf(THREE.PointLightHelper);
@@ -151,7 +164,7 @@ describe("Light sync system", () => {
       });
     });
 
-    const light = ctx.binding.get(entity) as THREE.DirectionalLight;
+    const light = findInScene(ctx.scene, entity, THREE.DirectionalLight)!;
     expect(light.intensity).toBe(1);
 
     runFrame(ctx, () => {
@@ -177,7 +190,7 @@ describe("Light sync system", () => {
       });
     });
 
-    const light = ctx.binding.get(entity) as THREE.AmbientLight;
+    const light = findInScene(ctx.scene, entity, THREE.AmbientLight)!;
     expect(light.intensity).toBe(1);
 
     runFrame(ctx, () => {
@@ -201,7 +214,7 @@ describe("Light sync system", () => {
       });
     });
 
-    const light = ctx.binding.get(entity) as THREE.PointLight;
+    const light = findInScene(ctx.scene, entity, THREE.PointLight)!;
 
     runFrame(ctx, () => {
       const data = ctx.world.getMut(entity, "PointLight")!;
@@ -226,9 +239,9 @@ describe("Light sync system", () => {
       });
     });
 
-    expect(ctx.binding.get(entity)).toBeDefined();
+    expect(findInScene(ctx.scene, entity, THREE.DirectionalLight)).toBeDefined();
     expect(
-      ctx.binding.scene.children.some(
+      ctx.scene.children.some(
         (c) => c instanceof THREE.DirectionalLightHelper
       )
     ).toBe(true);
@@ -237,9 +250,9 @@ describe("Light sync system", () => {
       ctx.world.removeComponent(entity, "DirectionalLight");
     });
 
-    expect(ctx.binding.get(entity)).toBeUndefined();
+    expect(findInScene(ctx.scene, entity, THREE.DirectionalLight)).toBeUndefined();
     expect(
-      ctx.binding.scene.children.some(
+      ctx.scene.children.some(
         (c) => c instanceof THREE.DirectionalLightHelper
       )
     ).toBe(false);
@@ -256,13 +269,13 @@ describe("Light sync system", () => {
       });
     });
 
-    expect(ctx.binding.get(entity)).toBeDefined();
+    expect(findInScene(ctx.scene, entity, THREE.AmbientLight)).toBeDefined();
 
     runFrame(ctx, () => {
       ctx.world.removeComponent(entity, "AmbientLight");
     });
 
-    expect(ctx.binding.get(entity)).toBeUndefined();
+    expect(findInScene(ctx.scene, entity, THREE.AmbientLight)).toBeUndefined();
   });
 
   it("removing PointLight component removes it from scene", () => {
@@ -278,13 +291,13 @@ describe("Light sync system", () => {
       });
     });
 
-    expect(ctx.binding.get(entity)).toBeDefined();
+    expect(findInScene(ctx.scene, entity, THREE.PointLight)).toBeDefined();
 
     runFrame(ctx, () => {
       ctx.world.removeComponent(entity, "PointLight");
     });
 
-    expect(ctx.binding.get(entity)).toBeUndefined();
+    expect(findInScene(ctx.scene, entity, THREE.PointLight)).toBeUndefined();
   });
 
   it("DirectionalLight with Transform3D gets position applied", () => {
@@ -303,7 +316,7 @@ describe("Light sync system", () => {
       });
     });
 
-    const light = ctx.binding.get(entity) as THREE.DirectionalLight;
+    const light = findInScene(ctx.scene, entity, THREE.DirectionalLight)!;
     expect(light.position.x).toBe(5);
     expect(light.position.y).toBe(10);
     expect(light.position.z).toBe(7);
@@ -327,7 +340,7 @@ describe("Light sync system", () => {
       });
     });
 
-    const light = ctx.binding.get(entity) as THREE.PointLight;
+    const light = findInScene(ctx.scene, entity, THREE.PointLight)!;
     expect(light.position.x).toBe(3);
     expect(light.position.y).toBe(6);
     expect(light.position.z).toBe(9);
@@ -354,7 +367,7 @@ describe("Light sync system", () => {
       t.position = [10, 20, 30];
     });
 
-    const light = ctx.binding.get(entity) as THREE.DirectionalLight;
+    const light = findInScene(ctx.scene, entity, THREE.DirectionalLight)!;
     expect(light.position.x).toBe(10);
     expect(light.position.y).toBe(20);
     expect(light.position.z).toBe(30);
@@ -383,7 +396,7 @@ describe("Light sync system", () => {
       t.position = [7, 8, 9];
     });
 
-    const light = ctx.binding.get(entity) as THREE.PointLight;
+    const light = findInScene(ctx.scene, entity, THREE.PointLight)!;
     expect(light.position.x).toBe(7);
     expect(light.position.y).toBe(8);
     expect(light.position.z).toBe(9);
@@ -397,12 +410,215 @@ describe("Light sync system", () => {
       ctx.world.setComponent(entity, "DirectionalLight");
     });
 
-    const light = ctx.binding.get(entity) as THREE.DirectionalLight;
+    const light = findInScene(ctx.scene, entity, THREE.DirectionalLight)!;
     expect(light).toBeInstanceOf(THREE.DirectionalLight);
     expect(light.intensity).toBe(1);
     // Default color from colorTuple is [0.8, 0.8, 0.8, 1.0]
     expect(light.color.r).toBeCloseTo(0.8);
     expect(light.color.g).toBeCloseTo(0.8);
     expect(light.color.b).toBeCloseTo(0.8);
+  });
+
+  // --- SpotLight tests ---
+
+  it("SpotLight added -> THREE.SpotLight appears in scene", () => {
+    const ctx = setup();
+    const entity = ctx.world.createEntity();
+
+    runFrame(ctx, () => {
+      ctx.world.setComponent(entity, "SpotLight", {
+        color: 0xff0000,
+        intensity: 2,
+        distance: 15,
+        angle: Math.PI / 4,
+        penumbra: 0.5,
+        decay: 1,
+        castShadow: true,
+        showHelper: false,
+      });
+    });
+
+    const light = findInScene(ctx.scene, entity, THREE.SpotLight)!;
+    expect(light).toBeInstanceOf(THREE.SpotLight);
+    expect(light.intensity).toBe(2);
+    expect(light.distance).toBe(15);
+    expect(light.angle).toBe(Math.PI / 4);
+    expect(light.penumbra).toBe(0.5);
+    expect(light.decay).toBe(1);
+    expect(light.castShadow).toBe(true);
+  });
+
+  it("SpotLight property update syncs to Three.js", () => {
+    const ctx = setup();
+    const entity = ctx.world.createEntity();
+
+    runFrame(ctx, () => {
+      ctx.world.setComponent(entity, "SpotLight", {
+        color: 0xffffff,
+        intensity: 1,
+        distance: 0,
+        angle: Math.PI / 3,
+        penumbra: 0,
+        decay: 2,
+        castShadow: false,
+        showHelper: false,
+      });
+    });
+
+    const light = findInScene(ctx.scene, entity, THREE.SpotLight)!;
+
+    runFrame(ctx, () => {
+      const data = ctx.world.getMut(entity, "SpotLight")!;
+      data.intensity = 5;
+      data.distance = 30;
+      data.angle = Math.PI / 6;
+      data.penumbra = 0.8;
+      data.decay = 1;
+      data.castShadow = true;
+    });
+
+    expect(light.intensity).toBe(5);
+    expect(light.distance).toBe(30);
+    expect(light.angle).toBe(Math.PI / 6);
+    expect(light.penumbra).toBe(0.8);
+    expect(light.decay).toBe(1);
+    expect(light.castShadow).toBe(true);
+  });
+
+  it("removing SpotLight component removes it from scene", () => {
+    const ctx = setup();
+    const entity = ctx.world.createEntity();
+
+    runFrame(ctx, () => {
+      ctx.world.setComponent(entity, "SpotLight", {
+        color: 0xffffff,
+        intensity: 1,
+        distance: 0,
+        angle: Math.PI / 3,
+        penumbra: 0,
+        decay: 2,
+        castShadow: false,
+        showHelper: false,
+      });
+    });
+
+    expect(findInScene(ctx.scene, entity, THREE.SpotLight)).toBeDefined();
+
+    runFrame(ctx, () => {
+      ctx.world.removeComponent(entity, "SpotLight");
+    });
+
+    expect(findInScene(ctx.scene, entity, THREE.SpotLight)).toBeUndefined();
+  });
+
+  it("SpotLight helper appears when showHelper is true on add", () => {
+    const ctx = setup();
+    const entity = ctx.world.createEntity();
+
+    runFrame(ctx, () => {
+      ctx.world.setComponent(entity, "SpotLight", {
+        color: 0xffffff,
+        intensity: 1,
+        distance: 0,
+        angle: Math.PI / 3,
+        penumbra: 0,
+        decay: 2,
+        castShadow: false,
+        showHelper: true,
+      });
+    });
+
+    const helper = ctx.scene.children.find(
+      (c) => c instanceof THREE.SpotLightHelper
+    );
+    expect(helper).toBeInstanceOf(THREE.SpotLightHelper);
+    expect(helper!.userData.entityId).toBe(entity);
+    expect(helper!.layers.isEnabled(EDITOR_LAYER)).toBe(true);
+  });
+
+  it("SpotLight helper does not appear when showHelper is false", () => {
+    const ctx = setup();
+    const entity = ctx.world.createEntity();
+
+    runFrame(ctx, () => {
+      ctx.world.setComponent(entity, "SpotLight", {
+        color: 0xffffff,
+        intensity: 1,
+        distance: 0,
+        angle: Math.PI / 3,
+        penumbra: 0,
+        decay: 2,
+        castShadow: false,
+        showHelper: false,
+      });
+    });
+
+    const helper = ctx.scene.children.find(
+      (c) => c instanceof THREE.SpotLightHelper
+    );
+    expect(helper).toBeUndefined();
+  });
+
+  it("SpotLight helper toggles on when showHelper changes to true", () => {
+    const ctx = setup();
+    const entity = ctx.world.createEntity();
+
+    runFrame(ctx, () => {
+      ctx.world.setComponent(entity, "SpotLight", {
+        color: 0xffffff,
+        intensity: 1,
+        distance: 0,
+        angle: Math.PI / 3,
+        penumbra: 0,
+        decay: 2,
+        castShadow: false,
+        showHelper: false,
+      });
+    });
+
+    expect(
+      ctx.scene.children.find((c) => c instanceof THREE.SpotLightHelper)
+    ).toBeUndefined();
+
+    runFrame(ctx, () => {
+      const data = ctx.world.getMut(entity, "SpotLight")!;
+      data.showHelper = true;
+    });
+
+    const helper = ctx.scene.children.find(
+      (c) => c instanceof THREE.SpotLightHelper
+    );
+    expect(helper).toBeInstanceOf(THREE.SpotLightHelper);
+  });
+
+  it("SpotLight helper toggles off when showHelper changes to false", () => {
+    const ctx = setup();
+    const entity = ctx.world.createEntity();
+
+    runFrame(ctx, () => {
+      ctx.world.setComponent(entity, "SpotLight", {
+        color: 0xffffff,
+        intensity: 1,
+        distance: 0,
+        angle: Math.PI / 3,
+        penumbra: 0,
+        decay: 2,
+        castShadow: false,
+        showHelper: true,
+      });
+    });
+
+    expect(
+      ctx.scene.children.find((c) => c instanceof THREE.SpotLightHelper)
+    ).toBeDefined();
+
+    runFrame(ctx, () => {
+      const data = ctx.world.getMut(entity, "SpotLight")!;
+      data.showHelper = false;
+    });
+
+    expect(
+      ctx.scene.children.find((c) => c instanceof THREE.SpotLightHelper)
+    ).toBeUndefined();
   });
 });

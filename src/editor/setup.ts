@@ -44,7 +44,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   controls.attach();
 
   const renderSync = createRenderSyncSystem(binding);
-  const lightSync = createLightSyncSystem(binding);
+  const lightSync = createLightSyncSystem(binding.scene);
   const transformSync = createTransformSyncSystem(binding, {
     shouldSkipTransform: (entity) =>
       gizmo.dragging && entity === gizmo.attachedEntity,
