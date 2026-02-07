@@ -13,28 +13,36 @@ export type ComponentRegistry = Record<string, SchemaLike>;
 export type EntityJson = {
   id: number;
   components: Record<string, JsonValue>;
+  parent?: number;
 };
 
 export type WorldJson = {
   version: number;
   entities: EntityJson[];
+  resources?: Record<string, JsonValue>;
 };
 
 export type Entity<R extends ComponentRegistry> = {
   id: number;
   components: Partial<{ [K in keyof R]: SchemaValue<R[K]> }>;
   unknownComponents?: Record<string, JsonValue>;
+  parent?: number;
 };
+
+export type ResourceRegistry = Record<string, SchemaLike>;
 
 export type World<R extends ComponentRegistry> = {
   version: 1;
   entities: Entity<R>[];
+  resources?: Record<string, unknown>;
 };
 
 export type WorldParseOptions = {
   allowUnknownComponents?: boolean;
+  allowUnknownResources?: boolean;
   applyDefaults?: DeserializeOptions["applyDefaults"];
   validation?: ValidationOptions;
+  resourceRegistry?: ResourceRegistry;
 };
 
 export type WorldParseResult<R extends ComponentRegistry> = {
@@ -45,6 +53,7 @@ export type WorldParseResult<R extends ComponentRegistry> = {
 export type WorldSerializeOptions = {
   stripUnknownComponents?: boolean;
   component?: SerializeOptions;
+  resourceRegistry?: ResourceRegistry;
 };
 
 export type WorldSerializeResult = {
@@ -96,14 +105,14 @@ export const parseWorld = <R extends ComponentRegistry>(
   const allowUnknownComponents = options.allowUnknownComponents ?? false;
   const allowUnknownProperties = options.validation?.allowUnknownProperties ?? false;
   const applyDefaults = options.applyDefaults ?? true;
-  const world: World<R> = { version: WORLD_VERSION, entities: [] };
+  const emptyWorld: World<R> = { version: WORLD_VERSION, entities: [] };
 
   if (!isObject(json)) {
     pushIssue(issues, "$", "Expected object");
-    return { world, issues };
+    return { world: emptyWorld, issues };
   }
 
-  const worldKeys = new Set(["version", "entities"]);
+  const worldKeys = new Set(["version", "entities", "resources"]);
   if (!allowUnknownProperties) {
     for (const key of Object.keys(json)) {
       if (!worldKeys.has(key)) {
@@ -129,13 +138,13 @@ export const parseWorld = <R extends ComponentRegistry>(
 
   if (!Object.prototype.hasOwnProperty.call(json, "entities")) {
     pushIssue(issues, "$.entities", "Missing required property");
-    return { world, issues };
+    return { world: emptyWorld, issues };
   }
 
   const entitiesValue = json.entities;
   if (!Array.isArray(entitiesValue)) {
     pushIssue(issues, "$.entities", "Expected array");
-    return { world, issues };
+    return { world: emptyWorld, issues };
   }
 
   const parsedEntities: Entity<R>[] = [];
@@ -146,7 +155,7 @@ export const parseWorld = <R extends ComponentRegistry>(
       return;
     }
 
-    const entityKeys = new Set(["id", "components"]);
+    const entityKeys = new Set(["id", "components", "parent"]);
     if (!allowUnknownProperties) {
       for (const key of Object.keys(entityValue)) {
         if (!entityKeys.has(key)) {
@@ -219,11 +228,65 @@ export const parseWorld = <R extends ComponentRegistry>(
       entity.unknownComponents = unknownComponents;
     }
 
+    if (Object.prototype.hasOwnProperty.call(entityValue, "parent")) {
+      const parentValue = entityValue.parent;
+      if (typeof parentValue !== "number" || Number.isNaN(parentValue)) {
+        pushIssue(issues, `${entityPath}.parent`, "Expected number");
+      } else if (!Number.isFinite(parentValue)) {
+        pushIssue(issues, `${entityPath}.parent`, "Expected finite number");
+      } else if (!Number.isInteger(parentValue)) {
+        pushIssue(issues, `${entityPath}.parent`, "Expected integer");
+      } else {
+        entity.parent = parentValue;
+      }
+    }
+
     parsedEntities.push(entity);
   });
 
+  const resourceRegistry = options.resourceRegistry;
+  const allowUnknownResources = options.allowUnknownResources ?? false;
+  const parsedResources: Record<string, unknown> = {};
+  let hasResources = false;
+
+  if (Object.prototype.hasOwnProperty.call(json, "resources")) {
+    const resourcesValue = json.resources;
+    if (!isObject(resourcesValue)) {
+      pushIssue(issues, "$.resources", "Expected object");
+    } else {
+      for (const [resourceName, resourceJson] of Object.entries(resourcesValue)) {
+        const resourcePath = pathForProp("$.resources", resourceName);
+        if (!resourceRegistry) {
+          pushIssue(issues, resourcePath, "Unknown resource");
+          continue;
+        }
+        const schema = resourceRegistry[resourceName];
+        if (!schema) {
+          if (!allowUnknownResources) {
+            pushIssue(issues, resourcePath, "Unknown resource");
+          }
+          continue;
+        }
+        const decoded = deserialize(schema, resourceJson, {
+          applyDefaults,
+          validation: options.validation,
+        });
+        parsedResources[resourceName] = decoded.value;
+        hasResources = true;
+        for (const issue of decoded.issues) {
+          pushIssue(issues, prefixIssuePath(resourcePath, issue.path), issue.message);
+        }
+      }
+    }
+  }
+
+  const world: World<R> = { version: WORLD_VERSION, entities: parsedEntities };
+  if (hasResources) {
+    world.resources = parsedResources;
+  }
+
   return {
-    world: { version: WORLD_VERSION, entities: parsedEntities },
+    world,
     issues,
   };
 };
@@ -276,11 +339,42 @@ export const serializeWorld = <R extends ComponentRegistry>(
       }
     }
 
-    return { id: entity.id, components };
+    const entry: EntityJson = { id: entity.id, components };
+    if (entity.parent !== undefined) {
+      entry.parent = entity.parent;
+    }
+    return entry;
   });
 
-  return {
-    json: { version: WORLD_VERSION, entities },
-    issues,
-  };
+  const json: WorldJson = { version: WORLD_VERSION, entities };
+
+  const resourceRegistry = options.resourceRegistry;
+  if (world.resources && resourceRegistry) {
+    const serializedResources: Record<string, JsonValue> = {};
+    let hasResources = false;
+    for (const [resourceName, resourceValue] of Object.entries(world.resources)) {
+      if (resourceValue === undefined) {
+        continue;
+      }
+      const schema = resourceRegistry[resourceName];
+      const resourcePath = pathForProp("$.resources", resourceName);
+      if (!schema) {
+        pushIssue(issues, resourcePath, "Unknown resource");
+        continue;
+      }
+      const encoded = serialize(schema, resourceValue, componentOptions);
+      if (encoded.json !== undefined) {
+        serializedResources[resourceName] = encoded.json;
+        hasResources = true;
+      }
+      for (const issue of encoded.issues) {
+        pushIssue(issues, prefixIssuePath(resourcePath, issue.path), issue.message);
+      }
+    }
+    if (hasResources) {
+      json.resources = serializedResources;
+    }
+  }
+
+  return { json, issues };
 };

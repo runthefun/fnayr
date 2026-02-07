@@ -126,3 +126,161 @@ describe("worldFromJson/worldToJson", () => {
     listenerSpy.mockRestore();
   });
 });
+
+describe("hierarchy serialization", () => {
+  const registry = {
+    Name: s.object({ label: s.string() }),
+  };
+
+  it("round-trips hierarchy through worldFromJson and worldToJson", () => {
+    const json = {
+      version: 1,
+      entities: [
+        { id: 1, components: { Name: { label: "Root" } } },
+        { id: 2, components: { Name: { label: "Child" } }, parent: 1 },
+        { id: 3, components: { Name: { label: "Grandchild" } }, parent: 2 },
+      ],
+    };
+
+    const parsed = worldFromJson(registry, json, { hierarchy: true });
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.hierarchy).toBeDefined();
+    expect(parsed.hierarchy!.getParent(2)).toBe(1);
+    expect(parsed.hierarchy!.getParent(3)).toBe(2);
+    expect(parsed.hierarchy!.getChildren(1)).toEqual([2]);
+    expect(parsed.hierarchy!.getChildren(2)).toEqual([3]);
+
+    const serialized = worldToJson(registry, parsed.world, {
+      hierarchy: parsed.hierarchy!,
+    });
+    expect(serialized.issues).toEqual([]);
+    expect(serialized.json).toEqual(json);
+  });
+
+  it("reports missing parent entity", () => {
+    const json = {
+      version: 1,
+      entities: [
+        { id: 1, components: { Name: { label: "Child" } }, parent: 99 },
+      ],
+    };
+
+    const parsed = worldFromJson(registry, json, { hierarchy: true });
+    expect(parsed.issues).toContainEqual({
+      path: "$.entities[0].parent",
+      message: "Parent entity 99 does not exist",
+    });
+  });
+
+  it("does not create hierarchy when option is false", () => {
+    const json = {
+      version: 1,
+      entities: [
+        { id: 1, components: { Name: { label: "Root" } } },
+        { id: 2, components: { Name: { label: "Child" } }, parent: 1 },
+      ],
+    };
+
+    const parsed = worldFromJson(registry, json);
+    expect(parsed.hierarchy).toBeUndefined();
+  });
+
+  it("omits parent from output when no hierarchy option provided", () => {
+    const json = {
+      version: 1,
+      entities: [
+        { id: 1, components: { Name: { label: "Root" } } },
+      ],
+    };
+
+    const parsed = worldFromJson(registry, json);
+    const serialized = worldToJson(registry, parsed.world);
+    expect(serialized.json.entities[0]).not.toHaveProperty("parent");
+  });
+});
+
+describe("resource serialization", () => {
+  const registry = {
+    Name: s.object({ label: s.string() }),
+  };
+
+  const resourceRegistry = {
+    Score: s.object({ value: s.number() }),
+    Level: s.object({ name: s.string() }),
+  };
+
+  it("round-trips resources through worldFromJson and worldToJson", () => {
+    const json = {
+      version: 1,
+      entities: [
+        { id: 1, components: { Name: { label: "Hero" } } },
+      ],
+      resources: {
+        Score: { value: 42 },
+        Level: { name: "Forest" },
+      },
+    };
+
+    const parsed = worldFromJson(registry, json, { resources: resourceRegistry });
+    expect(parsed.issues).toEqual([]);
+    expect((parsed.world as any).getResource("Score")).toEqual({ value: 42 });
+    expect((parsed.world as any).getResource("Level")).toEqual({ name: "Forest" });
+
+    const serialized = worldToJson(registry, parsed.world);
+    expect(serialized.issues).toEqual([]);
+    expect(serialized.json).toEqual(json);
+  });
+
+  it("omits resources from output when none are set", () => {
+    const json = {
+      version: 1,
+      entities: [
+        { id: 1, components: { Name: { label: "Hero" } } },
+      ],
+    };
+
+    const parsed = worldFromJson(registry, json, { resources: resourceRegistry });
+    expect(parsed.issues).toEqual([]);
+
+    const serialized = worldToJson(registry, parsed.world);
+    expect(serialized.json).not.toHaveProperty("resources");
+  });
+});
+
+describe("combined hierarchy and resources", () => {
+  const registry = {
+    Name: s.object({ label: s.string() }),
+  };
+
+  const resourceRegistry = {
+    Score: s.object({ value: s.number() }),
+  };
+
+  it("round-trips both hierarchy and resources together", () => {
+    const json = {
+      version: 1,
+      entities: [
+        { id: 1, components: { Name: { label: "Root" } } },
+        { id: 2, components: { Name: { label: "Child" } }, parent: 1 },
+      ],
+      resources: {
+        Score: { value: 100 },
+      },
+    };
+
+    const parsed = worldFromJson(registry, json, {
+      hierarchy: true,
+      resources: resourceRegistry,
+    });
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.hierarchy).toBeDefined();
+    expect(parsed.hierarchy!.getParent(2)).toBe(1);
+    expect((parsed.world as any).getResource("Score")).toEqual({ value: 100 });
+
+    const serialized = worldToJson(registry, parsed.world, {
+      hierarchy: parsed.hierarchy!,
+    });
+    expect(serialized.issues).toEqual([]);
+    expect(serialized.json).toEqual(json);
+  });
+});
