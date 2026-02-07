@@ -166,6 +166,7 @@ export class EcsWorld<
   private readonly entityManager: EntityManager;
   private readonly stores = new Map<ComponentType<R>, SparseSetStore<unknown>>();
   private readonly destroyListeners = new Set<(entity: number) => void>();
+  private readonly componentListeners = new Set<(entity: number, type: string) => void>();
   private readonly changes = new Map<
     ComponentType<R>,
     { added: Set<number>; removed: Set<number>; updated: Set<number> }
@@ -240,7 +241,7 @@ export class EcsWorld<
   /**
    * Adds or replaces a component on the entity.
    */
-  addComponent<K extends ComponentType<R>>(
+  setComponent<K extends ComponentType<R>>(
     entity: number,
     type: K,
     data?: ComponentData<R, K>
@@ -262,6 +263,9 @@ export class EcsWorld<
       this.recordAdded(type, entity);
       this.notifyCachedQueriesAdded(entity, type);
     }
+    for (const listener of this.componentListeners) {
+      listener(entity, type);
+    }
   }
 
   /**
@@ -278,6 +282,9 @@ export class EcsWorld<
     if (store.remove(entity)) {
       this.recordRemoved(type, entity);
       this.notifyCachedQueriesRemoved(entity, type);
+      for (const listener of this.componentListeners) {
+        listener(entity, type);
+      }
     }
   }
 
@@ -592,7 +599,7 @@ export class EcsWorld<
             typeof factoryOrValue === "function"
               ? (factoryOrValue as (index: number) => ComponentData<R, typeof type>)(i)
               : (factoryOrValue as ComponentData<R, typeof type>);
-          this.addComponent(entity, type, data);
+          this.setComponent(entity, type, data);
         }
       }
     }
@@ -666,6 +673,16 @@ export class EcsWorld<
     this.destroyListeners.add(listener);
     return () => {
       this.destroyListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Registers a callback invoked when a component is set or removed on an entity.
+   */
+  onComponentChanged(listener: (entity: number, type: string) => void): () => void {
+    this.componentListeners.add(listener);
+    return () => {
+      this.componentListeners.delete(listener);
     };
   }
 

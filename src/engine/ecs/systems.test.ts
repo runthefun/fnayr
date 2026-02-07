@@ -24,12 +24,12 @@ describe("Scheduler", () => {
   it("allows systems to query and mutate the world", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Transform", { x: 1 });
 
     const scheduler = new Scheduler(world);
     scheduler.addSystem((world, dt) => {
       for (const { entity, components } of world.query(["Transform"])) {
-        world.addComponent(entity, "Transform", {
+        world.setComponent(entity, "Transform", {
           x: components.Transform.x + dt,
         });
       }
@@ -43,7 +43,7 @@ describe("Scheduler", () => {
   it("calls beginFrame at start and endFrame at end of runFrame", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 0 });
+    world.setComponent(entity, "Transform", { x: 0 });
 
     // Flush the 'added' tracking from setup
     world.beginFrame();
@@ -54,7 +54,7 @@ describe("Scheduler", () => {
 
     scheduler.addSystem((w) => {
       // Update a component inside the system (already exists, so records as updated)
-      w.addComponent(entity, "Transform", { x: 5 });
+      w.setComponent(entity, "Transform", { x: 5 });
       addedDuringFrame = w.getUpdated("Transform").has(entity);
     });
 

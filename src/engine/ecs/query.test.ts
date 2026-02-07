@@ -15,10 +15,10 @@ describe("EcsWorld query", () => {
     const b = world.createEntity();
     const c = world.createEntity();
 
-    world.addComponent(a, "Transform", { x: 1 });
-    world.addComponent(b, "Transform", { x: 2 });
-    world.addComponent(b, "Name", { label: "Hero" });
-    world.addComponent(c, "Name", { label: "OnlyName" });
+    world.setComponent(a, "Transform", { x: 1 });
+    world.setComponent(b, "Transform", { x: 2 });
+    world.setComponent(b, "Name", { label: "Hero" });
+    world.setComponent(c, "Name", { label: "OnlyName" });
 
     const results = Array.from(world.query(["Transform"]));
 
@@ -36,9 +36,9 @@ describe("EcsWorld query", () => {
     const visible = world.createEntity();
     const hidden = world.createEntity();
 
-    world.addComponent(visible, "Transform", { x: 10 });
-    world.addComponent(hidden, "Transform", { x: 20 });
-    world.addComponent(hidden, "Hidden", { value: true });
+    world.setComponent(visible, "Transform", { x: 10 });
+    world.setComponent(hidden, "Transform", { x: 20 });
+    world.setComponent(hidden, "Hidden", { value: true });
 
     const results = Array.from(
       world.query(["Transform"], { exclude: ["Hidden"] })
@@ -54,9 +54,9 @@ describe("EcsWorld query", () => {
     const b = world.createEntity();
     const c = world.createEntity();
 
-    world.addComponent(a, "Transform", { x: 1 });
-    world.addComponent(b, "Transform", { x: 2 });
-    world.addComponent(c, "Transform", { x: 3 });
+    world.setComponent(a, "Transform", { x: 1 });
+    world.setComponent(b, "Transform", { x: 2 });
+    world.setComponent(c, "Transform", { x: 3 });
 
     const visited: number[] = [];
     for (const row of world.query(["Transform"])) {
@@ -74,13 +74,13 @@ describe("EcsWorld query", () => {
     const query = world.query(["Transform"]);
 
     const first = world.createEntity();
-    world.addComponent(first, "Transform", { x: 5 });
+    world.setComponent(first, "Transform", { x: 5 });
 
     expect(Array.from(query).map((row) => row.entity)).toEqual([first]);
 
     world.destroyEntity(first);
     const second = world.createEntity();
-    world.addComponent(second, "Transform", { x: 9 });
+    world.setComponent(second, "Transform", { x: 9 });
 
     expect(Array.from(query).map((row) => row.entity)).toEqual([second]);
   });
@@ -99,10 +99,10 @@ describe("EcsWorld createQuery (cached query)", () => {
     const b = world.createEntity();
     const c = world.createEntity();
 
-    world.addComponent(a, "Transform", { x: 1 });
-    world.addComponent(b, "Transform", { x: 2 });
-    world.addComponent(b, "Name", { label: "Hero" });
-    world.addComponent(c, "Name", { label: "OnlyName" });
+    world.setComponent(a, "Transform", { x: 1 });
+    world.setComponent(b, "Transform", { x: 2 });
+    world.setComponent(b, "Name", { label: "Hero" });
+    world.setComponent(c, "Name", { label: "OnlyName" });
 
     const cached = world.createQuery(["Transform"]);
     const onDemand = world.query(["Transform"]);
@@ -121,7 +121,7 @@ describe("EcsWorld createQuery (cached query)", () => {
     const cached = world.createQuery(["Transform"]);
     expect(cached.size).toBe(0);
 
-    world.addComponent(a, "Transform", { x: 1 });
+    world.setComponent(a, "Transform", { x: 1 });
     expect(cached.size).toBe(1);
 
     const results = Array.from(cached);
@@ -133,7 +133,7 @@ describe("EcsWorld createQuery (cached query)", () => {
   it("updates when components are removed", () => {
     const world = createWorld(registry);
     const a = world.createEntity();
-    world.addComponent(a, "Transform", { x: 1 });
+    world.setComponent(a, "Transform", { x: 1 });
 
     const cached = world.createQuery(["Transform"]);
     expect(cached.size).toBe(1);
@@ -147,8 +147,8 @@ describe("EcsWorld createQuery (cached query)", () => {
     const world = createWorld(registry);
     const a = world.createEntity();
     const b = world.createEntity();
-    world.addComponent(a, "Transform", { x: 1 });
-    world.addComponent(b, "Transform", { x: 2 });
+    world.setComponent(a, "Transform", { x: 1 });
+    world.setComponent(b, "Transform", { x: 2 });
 
     const cached = world.createQuery(["Transform"]);
     expect(cached.size).toBe(2);
@@ -166,14 +166,14 @@ describe("EcsWorld createQuery (cached query)", () => {
     const visible = world.createEntity();
     const hidden = world.createEntity();
 
-    world.addComponent(visible, "Transform", { x: 10 });
-    world.addComponent(hidden, "Transform", { x: 20 });
+    world.setComponent(visible, "Transform", { x: 10 });
+    world.setComponent(hidden, "Transform", { x: 20 });
 
     const cached = world.createQuery(["Transform"], { exclude: ["Hidden"] });
     expect(cached.size).toBe(2);
 
     // Adding excluded component removes entity from cached query
-    world.addComponent(hidden, "Hidden", { value: true });
+    world.setComponent(hidden, "Hidden", { value: true });
     expect(cached.size).toBe(1);
 
     const results = Array.from(cached);
@@ -190,21 +190,21 @@ describe("EcsWorld createQuery (cached query)", () => {
     const a = world.createEntity();
     const b = world.createEntity();
 
-    world.addComponent(a, "Transform", { x: 1 });
+    world.setComponent(a, "Transform", { x: 1 });
 
     const cached = world.createQuery(["Transform", "Name"]);
     expect(cached.size).toBe(0);
 
     // Adding one component is not enough
-    world.addComponent(b, "Transform", { x: 2 });
+    world.setComponent(b, "Transform", { x: 2 });
     expect(cached.size).toBe(0);
 
     // Adding second component makes it match
-    world.addComponent(b, "Name", { label: "Hero" });
+    world.setComponent(b, "Name", { label: "Hero" });
     expect(cached.size).toBe(1);
 
     // Entity a also gains Name
-    world.addComponent(a, "Name", { label: "Other" });
+    world.setComponent(a, "Name", { label: "Other" });
     expect(cached.size).toBe(2);
 
     // Removing one required component removes from match
@@ -215,8 +215,8 @@ describe("EcsWorld createQuery (cached query)", () => {
   it("provides correct component data when iterated", () => {
     const world = createWorld(registry);
     const a = world.createEntity();
-    world.addComponent(a, "Transform", { x: 42 });
-    world.addComponent(a, "Name", { label: "Test" });
+    world.setComponent(a, "Transform", { x: 42 });
+    world.setComponent(a, "Name", { label: "Test" });
 
     const cached = world.createQuery(["Transform", "Name"]);
     const results = Array.from(cached);
@@ -229,7 +229,7 @@ describe("EcsWorld createQuery (cached query)", () => {
   it("works after world.clear()", () => {
     const world = createWorld(registry);
     const a = world.createEntity();
-    world.addComponent(a, "Transform", { x: 1 });
+    world.setComponent(a, "Transform", { x: 1 });
 
     const cached = world.createQuery(["Transform"]);
     expect(cached.size).toBe(1);
@@ -239,7 +239,7 @@ describe("EcsWorld createQuery (cached query)", () => {
 
     // New entities are tracked after clear
     const b = world.createEntity();
-    world.addComponent(b, "Transform", { x: 2 });
+    world.setComponent(b, "Transform", { x: 2 });
     expect(cached.size).toBe(1);
   });
 
@@ -249,9 +249,9 @@ describe("EcsWorld createQuery (cached query)", () => {
     const b = world.createEntity();
     const c = world.createEntity();
 
-    world.addComponent(a, "Transform", { x: 1 });
-    world.addComponent(b, "Transform", { x: 2 });
-    world.addComponent(c, "Transform", { x: 3 });
+    world.setComponent(a, "Transform", { x: 1 });
+    world.setComponent(b, "Transform", { x: 2 });
+    world.setComponent(c, "Transform", { x: 3 });
 
     const cached = world.createQuery(["Transform"]);
 

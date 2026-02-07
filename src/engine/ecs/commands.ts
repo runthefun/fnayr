@@ -15,7 +15,7 @@ export interface Commands<R extends ComponentRegistry> {
   /** Queues an entity for destruction (applied on flush). */
   destroyEntity(entity: EntityId): void;
   /** Queues a component addition (applied on flush). */
-  addComponent<K extends ComponentType<R>>(
+  setComponent<K extends ComponentType<R>>(
     entity: EntityId,
     type: K,
     data?: ComponentData<R, K>
@@ -26,13 +26,13 @@ export interface Commands<R extends ComponentRegistry> {
 
 type Command<R extends ComponentRegistry> =
   | { kind: "destroy"; entity: EntityId }
-  | { kind: "addComponent"; entity: EntityId; type: ComponentType<R>; data?: unknown }
+  | { kind: "setComponent"; entity: EntityId; type: ComponentType<R>; data?: unknown }
   | { kind: "removeComponent"; entity: EntityId; type: ComponentType<R> };
 
 /**
  * Buffers world mutations and applies them in order on flush.
  * createEntity is executed immediately so the returned ID can be used
- * in subsequent addComponent calls within the same system.
+ * in subsequent setComponent calls within the same system.
  */
 export class CommandBuffer<R extends ComponentRegistry> implements Commands<R> {
   private readonly world: World<R>;
@@ -50,12 +50,12 @@ export class CommandBuffer<R extends ComponentRegistry> implements Commands<R> {
     this.buffer.push({ kind: "destroy", entity });
   }
 
-  addComponent<K extends ComponentType<R>>(
+  setComponent<K extends ComponentType<R>>(
     entity: EntityId,
     type: K,
     data?: ComponentData<R, K>
   ): void {
-    this.buffer.push({ kind: "addComponent", entity, type, data });
+    this.buffer.push({ kind: "setComponent", entity, type, data });
   }
 
   removeComponent<K extends ComponentType<R>>(entity: EntityId, type: K): void {
@@ -71,8 +71,8 @@ export class CommandBuffer<R extends ComponentRegistry> implements Commands<R> {
         case "destroy":
           this.world.destroyEntity(cmd.entity);
           break;
-        case "addComponent":
-          this.world.addComponent(cmd.entity, cmd.type, cmd.data as never);
+        case "setComponent":
+          this.world.setComponent(cmd.entity, cmd.type, cmd.data as never);
           break;
         case "removeComponent":
           this.world.removeComponent(cmd.entity, cmd.type);

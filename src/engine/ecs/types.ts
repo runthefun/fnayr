@@ -142,7 +142,7 @@ export interface World<R extends ComponentRegistry, Res extends ResourceRegistry
   /** Iterates over all alive entities. */
   entities(): Iterable<EntityId>;
   /** Adds or replaces a component on the entity. */
-  addComponent<K extends ComponentType<R>>(
+  setComponent<K extends ComponentType<R>>(
     entity: EntityId,
     type: K,
     data?: ComponentData<R, K>

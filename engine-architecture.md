@@ -142,7 +142,7 @@ Core responsibilities:
 | Concern | API |
 |---|---|
 | Entity lifecycle | `createEntity`, `destroyEntity`, `isAlive`, `entities`, `spawn` |
-| Component CRUD | `addComponent`, `removeComponent`, `getComponent`, `getMut`, `hasComponent` |
+| Component CRUD | `setComponent`, `removeComponent`, `getComponent`, `getMut`, `hasComponent` |
 | Querying | `query` (on-demand), `createQuery` (cached/incremental) |
 | Change tracking | `getAdded`, `getRemoved`, `getUpdated`, `beginFrame`/`endFrame`/`flushChanges` |
 | Resources | `setResource`, `getResource`, `hasResource` |
@@ -152,7 +152,7 @@ Core responsibilities:
 
 **Destroy ordering:** `destroyEntity` fires destroy listeners *before* removing components and marking the entity dead. This allows cleanup code (hierarchy cascade, serialization snapshots, etc.) to access component data during teardown.
 
-**Component defaults:** `addComponent` without data uses `getDefault(schema)` to populate the component from schema defaults. Tag components always receive `true`.
+**Component defaults:** `setComponent` without data uses `getDefault(schema)` to populate the component from schema defaults. Tag components always receive `true`.
 
 ### Change Tracking
 
@@ -172,7 +172,7 @@ Each component type maintains per-frame `added`/`removed`/`updated` sets. Smart 
 2. Snapshots the base entity array with `.slice()` for safe iteration during mutation.
 3. Checks all other included stores and exclude stores per entity.
 
-**Cached queries** (`world.createQuery(include, { exclude })`) maintain a live `Set<EntityId>` of matched entities, updated incrementally on `addComponent`/`removeComponent`/`destroyEntity`. Initial population uses the on-demand query. Iteration snapshots the set to `Array.from()` for mutation safety.
+**Cached queries** (`world.createQuery(include, { exclude })`) maintain a live `Set<EntityId>` of matched entities, updated incrementally on `setComponent`/`removeComponent`/`destroyEntity`. Initial population uses the on-demand query. Iteration snapshots the set to `Array.from()` for mutation safety.
 
 **Key design choice:** Two query tiers balance simplicity vs. performance. On-demand queries have zero setup cost; cached queries amortize matching cost across frames for hot-path iteration.
 
@@ -200,7 +200,7 @@ scheduler.runFrame(dt);
 The `CommandBuffer` implements the `Commands` interface for deferred mutation:
 
 - `createEntity()` executes **immediately** (so the returned ID is usable in subsequent commands).
-- `destroyEntity`, `addComponent`, `removeComponent` are **buffered** and applied on `flush()`.
+- `destroyEntity`, `setComponent`, `removeComponent` are **buffered** and applied on `flush()`.
 - The scheduler creates a fresh `CommandBuffer` per system and flushes it after the system returns.
 
 **Key design choice:** Deferred commands prevent iterator invalidation. Systems can safely query and iterate while queueing structural changes. Immediate `createEntity` avoids the need for placeholder IDs.

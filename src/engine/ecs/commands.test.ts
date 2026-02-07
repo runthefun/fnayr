@@ -22,7 +22,7 @@ describe("CommandBuffer", () => {
   it("destroyEntity is deferred until flush", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1, y: 2 });
+    world.setComponent(entity, "Transform", { x: 1, y: 2 });
 
     const cmds = new CommandBuffer(world);
     cmds.destroyEntity(entity);
@@ -37,12 +37,12 @@ describe("CommandBuffer", () => {
     expect(world.isAlive(entity)).toBe(false);
   });
 
-  it("addComponent is deferred until flush", () => {
+  it("setComponent is deferred until flush", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
 
     const cmds = new CommandBuffer(world);
-    cmds.addComponent(entity, "Transform", { x: 5, y: 10 });
+    cmds.setComponent(entity, "Transform", { x: 5, y: 10 });
 
     // Component not yet added
     expect(world.hasComponent(entity, "Transform")).toBe(false);
@@ -57,7 +57,7 @@ describe("CommandBuffer", () => {
   it("removeComponent is deferred until flush", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1, y: 2 });
+    world.setComponent(entity, "Transform", { x: 1, y: 2 });
 
     const cmds = new CommandBuffer(world);
     cmds.removeComponent(entity, "Transform");
@@ -77,20 +77,20 @@ describe("CommandBuffer", () => {
 
     const cmds = new CommandBuffer(world);
     // Add then remove — net result: no component
-    cmds.addComponent(entity, "Transform", { x: 1, y: 2 });
+    cmds.setComponent(entity, "Transform", { x: 1, y: 2 });
     cmds.removeComponent(entity, "Transform");
 
     cmds.flush();
     expect(world.hasComponent(entity, "Transform")).toBe(false);
   });
 
-  it("createEntity can be used with subsequent addComponent in same buffer", () => {
+  it("createEntity can be used with subsequent setComponent in same buffer", () => {
     const world = createWorld(registry);
 
     const cmds = new CommandBuffer(world);
     const entity = cmds.createEntity();
-    cmds.addComponent(entity, "Transform", { x: 3, y: 4 });
-    cmds.addComponent(entity, "Health", { hp: 100 });
+    cmds.setComponent(entity, "Transform", { x: 3, y: 4 });
+    cmds.setComponent(entity, "Health", { hp: 100 });
 
     cmds.flush();
 
@@ -104,7 +104,7 @@ describe("CommandBuffer", () => {
     const entity = world.createEntity();
 
     const cmds = new CommandBuffer(world);
-    cmds.addComponent(entity, "Transform", { x: 1, y: 1 });
+    cmds.setComponent(entity, "Transform", { x: 1, y: 1 });
     cmds.flush();
 
     // Remove the component directly
@@ -116,12 +116,12 @@ describe("CommandBuffer", () => {
     expect(world.hasComponent(entity, "Transform")).toBe(false);
   });
 
-  it("addComponent works with tag components (no data arg)", () => {
+  it("setComponent works with tag components (no data arg)", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
 
     const cmds = new CommandBuffer(world);
-    cmds.addComponent(entity, "Tag");
+    cmds.setComponent(entity, "Tag");
 
     cmds.flush();
     expect(world.hasComponent(entity, "Tag")).toBe(true);
@@ -136,9 +136,9 @@ describe("CommandBuffer integration with Scheduler", () => {
     const e2 = world.createEntity();
     const e3 = world.createEntity();
 
-    world.addComponent(e1, "Transform", { x: 1, y: 0 });
-    world.addComponent(e2, "Transform", { x: 2, y: 0 });
-    world.addComponent(e3, "Transform", { x: 3, y: 0 });
+    world.setComponent(e1, "Transform", { x: 1, y: 0 });
+    world.setComponent(e2, "Transform", { x: 2, y: 0 });
+    world.setComponent(e3, "Transform", { x: 3, y: 0 });
 
     const visited: number[] = [];
 
@@ -171,8 +171,8 @@ describe("CommandBuffer integration with Scheduler", () => {
 
     const scheduler = new Scheduler(world);
     scheduler.addSystem((_w, _dt, cmds) => {
-      cmds.addComponent(entity, "Transform", { x: 10, y: 20 });
-      cmds.addComponent(entity, "Health", { hp: 50 });
+      cmds.setComponent(entity, "Transform", { x: 10, y: 20 });
+      cmds.setComponent(entity, "Health", { hp: 50 });
     });
 
     scheduler.runFrame(0.016);
@@ -184,13 +184,13 @@ describe("CommandBuffer integration with Scheduler", () => {
   it("existing systems that ignore commands still work", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 0, y: 0 });
+    world.setComponent(entity, "Transform", { x: 0, y: 0 });
 
     const scheduler = new Scheduler(world);
     // System that only uses world and dt (ignores commands parameter)
     scheduler.addSystem((w, dt) => {
       for (const { entity, components } of w.query(["Transform"])) {
-        w.addComponent(entity, "Transform", {
+        w.setComponent(entity, "Transform", {
           x: components.Transform.x + dt,
           y: components.Transform.y,
         });
@@ -210,7 +210,7 @@ describe("CommandBuffer integration with Scheduler", () => {
 
     // First system adds a component via commands
     scheduler.addSystem((_w, _dt, cmds) => {
-      cmds.addComponent(entity, "Transform", { x: 1, y: 2 });
+      cmds.setComponent(entity, "Transform", { x: 1, y: 2 });
     });
 
     // Second system checks the component was flushed from first system's commands

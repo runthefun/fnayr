@@ -14,7 +14,7 @@ describe("EcsWorld", () => {
 
     expect(world.hasComponent(entity, "Transform")).toBe(false);
 
-    world.addComponent(entity, "Transform", { x: 2 });
+    world.setComponent(entity, "Transform", { x: 2 });
 
     expect(world.hasComponent(entity, "Transform")).toBe(true);
     expect(world.getComponent(entity, "Transform")).toEqual({ x: 2 });
@@ -28,8 +28,8 @@ describe("EcsWorld", () => {
   it("cleans up components when entities are destroyed", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
-    world.addComponent(entity, "Name", { label: "Hero" });
+    world.setComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Name", { label: "Hero" });
 
     world.destroyEntity(entity);
 
@@ -45,14 +45,14 @@ describe("EcsWorld", () => {
     world.destroyEntity(entity);
 
     expect(() =>
-      world.addComponent(entity, "Transform", { x: 5 })
+      world.setComponent(entity, "Transform", { x: 5 })
     ).toThrow(/not alive/i);
   });
 
   it("treats dead entities as empty for reads", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 3 });
+    world.setComponent(entity, "Transform", { x: 3 });
     world.destroyEntity(entity);
 
     expect(world.getComponent(entity, "Transform")).toBeUndefined();
@@ -79,8 +79,8 @@ describe("EcsWorld", () => {
   it("destroy listeners can access components on the entity being destroyed", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 42 });
-    world.addComponent(entity, "Name", { label: "Hero" });
+    world.setComponent(entity, "Transform", { x: 42 });
+    world.setComponent(entity, "Name", { label: "Hero" });
 
     let observedAlive = false;
     let observedTransform: { x: number } | undefined;
@@ -107,10 +107,61 @@ describe("EcsWorld", () => {
     expect(world.getComponent(entity, "Transform")).toBeUndefined();
   });
 
+  it("onComponentChanged fires on set (new component)", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    const events: [number, string][] = [];
+    world.onComponentChanged((e, type) => events.push([e, type]));
+
+    world.setComponent(entity, "Transform", { x: 1 });
+
+    expect(events).toEqual([[entity, "Transform"]]);
+  });
+
+  it("onComponentChanged fires on set (replace existing)", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    world.setComponent(entity, "Transform", { x: 1 });
+
+    const events: [number, string][] = [];
+    world.onComponentChanged((e, type) => events.push([e, type]));
+
+    world.setComponent(entity, "Transform", { x: 2 });
+
+    expect(events).toEqual([[entity, "Transform"]]);
+  });
+
+  it("onComponentChanged fires on remove", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    world.setComponent(entity, "Transform", { x: 1 });
+
+    const events: [number, string][] = [];
+    world.onComponentChanged((e, type) => events.push([e, type]));
+
+    world.removeComponent(entity, "Transform");
+
+    expect(events).toEqual([[entity, "Transform"]]);
+  });
+
+  it("onComponentChanged unsubscribe stops notifications", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+    const events: [number, string][] = [];
+    const unsub = world.onComponentChanged((e, type) => events.push([e, type]));
+
+    world.setComponent(entity, "Transform", { x: 1 });
+    expect(events).toHaveLength(1);
+
+    unsub();
+    world.setComponent(entity, "Transform", { x: 2 });
+    expect(events).toHaveLength(1);
+  });
+
   it("getMut returns the same reference as getComponent", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 5 });
+    world.setComponent(entity, "Transform", { x: 5 });
     world.beginFrame();
 
     const ref = world.getComponent(entity, "Transform");
@@ -121,7 +172,7 @@ describe("EcsWorld", () => {
   it("mutating the getMut reference is visible via getComponent", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Transform", { x: 1 });
     world.beginFrame();
 
     const mutRef = world.getMut(entity, "Transform");
@@ -133,7 +184,7 @@ describe("EcsWorld", () => {
   it("getMut marks the component as updated in change tracking", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Transform", { x: 1 });
     world.beginFrame();
 
     world.getMut(entity, "Transform");
@@ -145,7 +196,7 @@ describe("EcsWorld", () => {
     const world = createWorld(registry);
     world.beginFrame();
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Transform", { x: 1 });
 
     world.getMut(entity, "Transform");
 
@@ -156,7 +207,7 @@ describe("EcsWorld", () => {
   it("getMut returns undefined for dead entities and missing components", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Transform", { x: 1 });
 
     // Missing component
     expect(world.getMut(entity, "Name")).toBeUndefined();
@@ -171,8 +222,8 @@ describe("EcsWorld", () => {
     world.beginFrame();
 
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
-    world.addComponent(entity, "Name", { label: "Test" });
+    world.setComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Name", { label: "Test" });
 
     // Flush the adds so they don't interfere
     world.beginFrame();
@@ -191,22 +242,22 @@ describe("Tag components", () => {
     Static: s.tag(),
   };
 
-  it("addComponent without data arg works for tag components", () => {
+  it("setComponent without data arg works for tag components", () => {
     const world = createWorld(tagRegistry);
     const entity = world.createEntity();
 
-    world.addComponent(entity, "Visible");
+    world.setComponent(entity, "Visible");
 
     expect(world.hasComponent(entity, "Visible")).toBe(true);
     expect(world.getComponent(entity, "Visible")).toBe(true);
   });
 
-  it("addComponent with explicit data for tag stores true regardless", () => {
+  it("setComponent with explicit data for tag stores true regardless", () => {
     const world = createWorld(tagRegistry);
     const entity = world.createEntity();
 
     // Even if data is passed, tag always stores true
-    world.addComponent(entity, "Visible");
+    world.setComponent(entity, "Visible");
 
     expect(world.getComponent(entity, "Visible")).toBe(true);
   });
@@ -215,7 +266,7 @@ describe("Tag components", () => {
     const world = createWorld(tagRegistry);
     const entity = world.createEntity();
 
-    world.addComponent(entity, "Visible");
+    world.setComponent(entity, "Visible");
 
     expect(world.hasComponent(entity, "Visible")).toBe(true);
   });
@@ -223,7 +274,7 @@ describe("Tag components", () => {
   it("tag components can be removed", () => {
     const world = createWorld(tagRegistry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Visible");
+    world.setComponent(entity, "Visible");
 
     world.removeComponent(entity, "Visible");
 
@@ -237,13 +288,13 @@ describe("Tag components", () => {
     const e2 = world.createEntity();
     const e3 = world.createEntity();
 
-    world.addComponent(e1, "Transform", { x: 1 });
-    world.addComponent(e1, "Visible");
+    world.setComponent(e1, "Transform", { x: 1 });
+    world.setComponent(e1, "Visible");
 
-    world.addComponent(e2, "Transform", { x: 2 });
+    world.setComponent(e2, "Transform", { x: 2 });
 
-    world.addComponent(e3, "Transform", { x: 3 });
-    world.addComponent(e3, "Visible");
+    world.setComponent(e3, "Transform", { x: 3 });
+    world.setComponent(e3, "Visible");
 
     const results = [...world.query(["Transform", "Visible"] as const)];
     const entities = results.map((r) => r.entity);
@@ -263,10 +314,10 @@ describe("Tag components", () => {
     const e1 = world.createEntity();
     const e2 = world.createEntity();
 
-    world.addComponent(e1, "Transform", { x: 1 });
-    world.addComponent(e1, "Static");
+    world.setComponent(e1, "Transform", { x: 1 });
+    world.setComponent(e1, "Static");
 
-    world.addComponent(e2, "Transform", { x: 2 });
+    world.setComponent(e2, "Transform", { x: 2 });
 
     const results = [
       ...world.query(["Transform"] as const, { exclude: ["Static"] }),
@@ -282,7 +333,7 @@ describe("Tag components", () => {
     world.beginFrame();
 
     const entity = world.createEntity();
-    world.addComponent(entity, "Visible");
+    world.setComponent(entity, "Visible");
 
     expect(world.getAdded("Visible")).toContain(entity);
 
@@ -292,11 +343,11 @@ describe("Tag components", () => {
     expect(world.getRemoved("Visible")).toContain(entity);
   });
 
-  it("addComponent without data for non-tag component uses schema defaults", () => {
+  it("setComponent without data for non-tag component uses schema defaults", () => {
     const world = createWorld(tagRegistry);
     const entity = world.createEntity();
 
-    world.addComponent(entity, "Transform");
+    world.setComponent(entity, "Transform");
 
     expect(world.hasComponent(entity, "Transform")).toBe(true);
     expect(world.getComponent(entity, "Transform")).toEqual({ x: 0 });
@@ -357,21 +408,21 @@ describe("Component defaults at addition time", () => {
     Visible: s.tag(),
   };
 
-  it("addComponent without data uses schema defaults", () => {
+  it("setComponent without data uses schema defaults", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
 
-    world.addComponent(entity, "Position");
+    world.setComponent(entity, "Position");
 
     expect(world.hasComponent(entity, "Position")).toBe(true);
     expect(world.getComponent(entity, "Position")).toEqual({ x: 0, y: 0 });
   });
 
-  it("addComponent with data uses provided data", () => {
+  it("setComponent with data uses provided data", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
 
-    world.addComponent(entity, "Position", { x: 5, y: 10 });
+    world.setComponent(entity, "Position", { x: 5, y: 10 });
 
     expect(world.getComponent(entity, "Position")).toEqual({ x: 5, y: 10 });
   });
@@ -381,8 +432,8 @@ describe("Component defaults at addition time", () => {
     const e1 = world.createEntity();
     const e2 = world.createEntity();
 
-    world.addComponent(e1, "Position");
-    world.addComponent(e2, "Position");
+    world.setComponent(e1, "Position");
+    world.setComponent(e2, "Position");
 
     const c1 = world.getComponent(e1, "Position")!;
     const c2 = world.getComponent(e2, "Position")!;
@@ -396,7 +447,7 @@ describe("Component defaults at addition time", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
 
-    world.addComponent(entity, "Label");
+    world.setComponent(entity, "Label");
 
     expect(world.getComponent(entity, "Label")).toEqual({ name: "" });
   });
@@ -405,7 +456,7 @@ describe("Component defaults at addition time", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
 
-    world.addComponent(entity, "Visible");
+    world.setComponent(entity, "Visible");
 
     expect(world.getComponent(entity, "Visible")).toBe(true);
   });
@@ -420,7 +471,7 @@ describe("change tracking returns ReadonlySet", () => {
     const world = createWorld(registry);
     world.beginFrame();
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Transform", { x: 1 });
 
     const added = world.getAdded("Transform");
     expect(added).toBeInstanceOf(Set);
@@ -431,7 +482,7 @@ describe("change tracking returns ReadonlySet", () => {
   it("getRemoved returns a Set containing the removed entity", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Transform", { x: 1 });
     world.beginFrame();
     world.removeComponent(entity, "Transform");
 
@@ -444,9 +495,9 @@ describe("change tracking returns ReadonlySet", () => {
   it("getUpdated returns a Set containing the updated entity", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Transform", { x: 1 });
     world.beginFrame();
-    world.addComponent(entity, "Transform", { x: 2 });
+    world.setComponent(entity, "Transform", { x: 2 });
 
     const updated = world.getUpdated("Transform");
     expect(updated).toBeInstanceOf(Set);
@@ -579,8 +630,8 @@ describe("World clear / reset", () => {
     const world = createWorld(registry);
     const e1 = world.createEntity();
     const e2 = world.createEntity();
-    world.addComponent(e1, "Transform", { x: 1 });
-    world.addComponent(e2, "Name", { label: "test" });
+    world.setComponent(e1, "Transform", { x: 1 });
+    world.setComponent(e2, "Name", { label: "test" });
 
     world.clear();
 
@@ -592,10 +643,10 @@ describe("World clear / reset", () => {
     const world = createWorld(registry);
     const e1 = world.createEntity();
     const e2 = world.createEntity();
-    world.addComponent(e1, "Transform", { x: 1 });
-    world.addComponent(e2, "Transform", { x: 2 });
-    world.addComponent(e1, "Name", { label: "hero" });
-    world.addComponent(e2, "Visible");
+    world.setComponent(e1, "Transform", { x: 1 });
+    world.setComponent(e2, "Transform", { x: 2 });
+    world.setComponent(e1, "Name", { label: "hero" });
+    world.setComponent(e2, "Visible");
 
     world.clear();
 
@@ -609,8 +660,8 @@ describe("World clear / reset", () => {
     const e1 = world.createEntity();
     const e2 = world.createEntity();
     const e3 = world.createEntity();
-    world.addComponent(e1, "Transform", { x: 1 });
-    world.addComponent(e2, "Transform", { x: 2 });
+    world.setComponent(e1, "Transform", { x: 1 });
+    world.setComponent(e2, "Transform", { x: 2 });
 
     const destroyed: number[] = [];
     world.onEntityDestroyed((entity) => destroyed.push(entity));
@@ -626,7 +677,7 @@ describe("World clear / reset", () => {
   it("destroy listeners can access components during clear()", () => {
     const world = createWorld(registry);
     const e1 = world.createEntity();
-    world.addComponent(e1, "Transform", { x: 42 });
+    world.setComponent(e1, "Transform", { x: 42 });
 
     let observedTransform: { x: number } | undefined;
     world.onEntityDestroyed((entity) => {
@@ -641,7 +692,7 @@ describe("World clear / reset", () => {
   it("new entities can be created after clear()", () => {
     const world = createWorld(registry);
     const oldEntity = world.createEntity();
-    world.addComponent(oldEntity, "Transform", { x: 1 });
+    world.setComponent(oldEntity, "Transform", { x: 1 });
 
     world.clear();
 
@@ -649,7 +700,7 @@ describe("World clear / reset", () => {
     expect(world.isAlive(newEntity)).toBe(true);
     expect(world.entityCount).toBe(1);
 
-    world.addComponent(newEntity, "Transform", { x: 99 });
+    world.setComponent(newEntity, "Transform", { x: 99 });
     expect(world.getComponent(newEntity, "Transform")).toEqual({ x: 99 });
   });
 
@@ -657,7 +708,7 @@ describe("World clear / reset", () => {
     const world = createWorld(registry);
     world.beginFrame();
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Transform", { x: 1 });
 
     // There should be an added change before clear
     expect(world.getAdded("Transform").size).toBe(1);
@@ -673,8 +724,8 @@ describe("World clear / reset", () => {
   it("stats() reflects empty state after clear()", () => {
     const world = createWorld(registry);
     const e1 = world.createEntity();
-    world.addComponent(e1, "Transform", { x: 1 });
-    world.addComponent(e1, "Visible");
+    world.setComponent(e1, "Transform", { x: 1 });
+    world.setComponent(e1, "Visible");
 
     world.clear();
 
@@ -834,11 +885,11 @@ describe("Entity count and debug stats", () => {
     const e2 = world.createEntity();
     const e3 = world.createEntity();
 
-    world.addComponent(e1, "Transform", { x: 1 });
-    world.addComponent(e2, "Transform", { x: 2 });
+    world.setComponent(e1, "Transform", { x: 1 });
+    world.setComponent(e2, "Transform", { x: 2 });
     expect(world.componentCount("Transform")).toBe(2);
 
-    world.addComponent(e3, "Name", { label: "test" });
+    world.setComponent(e3, "Name", { label: "test" });
     expect(world.componentCount("Name")).toBe(1);
 
     world.removeComponent(e1, "Transform");
@@ -848,8 +899,8 @@ describe("Entity count and debug stats", () => {
   it("componentCount updates when entity is destroyed", () => {
     const world = createWorld(registry);
     const e1 = world.createEntity();
-    world.addComponent(e1, "Transform", { x: 1 });
-    world.addComponent(e1, "Name", { label: "hero" });
+    world.setComponent(e1, "Transform", { x: 1 });
+    world.setComponent(e1, "Name", { label: "hero" });
 
     expect(world.componentCount("Transform")).toBe(1);
     expect(world.componentCount("Name")).toBe(1);
@@ -870,10 +921,10 @@ describe("Entity count and debug stats", () => {
     const e1 = world.createEntity();
     const e2 = world.createEntity();
 
-    world.addComponent(e1, "Transform", { x: 1 });
-    world.addComponent(e2, "Transform", { x: 2 });
-    world.addComponent(e1, "Name", { label: "hero" });
-    world.addComponent(e2, "Visible");
+    world.setComponent(e1, "Transform", { x: 1 });
+    world.setComponent(e2, "Transform", { x: 2 });
+    world.setComponent(e1, "Name", { label: "hero" });
+    world.setComponent(e2, "Visible");
 
     const result = world.stats();
 
@@ -890,9 +941,9 @@ describe("Entity count and debug stats", () => {
     const e1 = world.createEntity();
     const e2 = world.createEntity();
 
-    world.addComponent(e1, "Transform", { x: 1 });
-    world.addComponent(e2, "Transform", { x: 2 });
-    world.addComponent(e1, "Name", { label: "hero" });
+    world.setComponent(e1, "Transform", { x: 1 });
+    world.setComponent(e2, "Transform", { x: 2 });
+    world.setComponent(e1, "Name", { label: "hero" });
 
     world.destroyEntity(e1);
 

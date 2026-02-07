@@ -141,8 +141,8 @@ const registry = {
 const world = ecs.createWorld(registry);
 
 const entity = world.createEntity();
-world.addComponent(entity, "Position", { x: 0, y: 0 });
-world.addComponent(entity, "Velocity", { x: 2, y: 1 });
+world.setComponent(entity, "Position", { x: 0, y: 0 });
+world.setComponent(entity, "Velocity", { x: 2, y: 1 });
 ```
 
 ### Systems & the Scheduler
@@ -154,7 +154,7 @@ const scheduler = new ecs.Scheduler(world);
 
 scheduler.addSystem((world, dt) => {
   for (const { entity, components } of world.query(["Position", "Velocity"])) {
-    world.addComponent(entity, "Position", {
+    world.setComponent(entity, "Position", {
       x: components.Position.x + components.Velocity.x * dt,
       y: components.Position.y + components.Velocity.y * dt,
     });
@@ -176,8 +176,8 @@ const registry = {
 
 const world = ecs.createWorld(registry);
 const e = world.createEntity();
-world.addComponent(e, "Player");                  // no data needed
-world.addComponent(e, "Position", { x: 0, y: 0 });
+world.setComponent(e, "Player");                  // no data needed
+world.setComponent(e, "Position", { x: 0, y: 0 });
 ```
 
 ### In-Place Mutation
@@ -255,7 +255,7 @@ scheduler.addSystem((world, dt, commands) => {
 
   // Creating entities is immediate — you get a usable ID right away
   const spawned = commands.createEntity();
-  commands.addComponent(spawned, "Position", { x: 0, y: 0 });
+  commands.setComponent(spawned, "Position", { x: 0, y: 0 });
 });
 ```
 

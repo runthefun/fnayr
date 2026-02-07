@@ -170,9 +170,9 @@ describe("Hierarchy", () => {
     const parent = world.createEntity();
     const child1 = world.createEntity();
     const child2 = world.createEntity();
-    world.addComponent(parent, "Name", { label: "parent" });
-    world.addComponent(child1, "Name", { label: "child1" });
-    world.addComponent(child2, "Name", { label: "child2" });
+    world.setComponent(parent, "Name", { label: "parent" });
+    world.setComponent(child1, "Name", { label: "child1" });
+    world.setComponent(child2, "Name", { label: "child2" });
 
     hierarchy.setParent(child1, parent);
     hierarchy.setParent(child2, parent);

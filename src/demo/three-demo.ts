@@ -160,25 +160,25 @@ world.beginFrame();
 
 // Red spinning box
 const box = world.createEntity();
-world.addComponent(box, "Transform3D", {
+world.setComponent(box, "Transform3D", {
   position: [0, 1, 0],
   rotation: [0, 0, 0, 1],
   scale: [1, 1, 1],
 });
-world.addComponent(box, "MeshRenderer", {
+world.setComponent(box, "MeshRenderer", {
   geometry: "box",
   color: [0.9, 0.15, 0.15, 1],
 });
-world.addComponent(box, "Spin", { speed: 1 });
+world.setComponent(box, "Spin", { speed: 1 });
 
 // Green ground plane
 const ground = world.createEntity();
-world.addComponent(ground, "Transform3D", {
+world.setComponent(ground, "Transform3D", {
   position: [0, 0, 0],
   rotation: [-Math.SQRT1_2, 0, 0, Math.SQRT1_2], // rotate -90deg around X
   scale: [10, 10, 1],
 });
-world.addComponent(ground, "MeshRenderer", {
+world.setComponent(ground, "MeshRenderer", {
   geometry: "plane",
   color: [0.2, 0.7, 0.2, 1],
 });

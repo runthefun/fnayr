@@ -10,8 +10,8 @@ describe("ECS runtime example", () => {
 
     const world = ecs.createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 0 });
-    world.addComponent(entity, "Velocity", { x: 2 });
+    world.setComponent(entity, "Transform", { x: 0 });
+    world.setComponent(entity, "Velocity", { x: 2 });
 
     const scheduler = new ecs.Scheduler(world);
     scheduler.addSystem((world, dt) => {
@@ -19,7 +19,7 @@ describe("ECS runtime example", () => {
         "Transform",
         "Velocity",
       ])) {
-        world.addComponent(entity, "Transform", {
+        world.setComponent(entity, "Transform", {
           x: components.Transform.x + components.Velocity.x * dt,
         });
       }

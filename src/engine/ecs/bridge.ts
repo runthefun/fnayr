@@ -83,7 +83,7 @@ export const worldFromJson = <R extends ComponentRegistry>(
         continue;
       }
       try {
-        world.addComponent(
+        world.setComponent(
           runtimeEntity,
           componentName as ComponentType<R>,
           componentValue as ComponentData<R, ComponentType<R>>

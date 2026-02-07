@@ -39,7 +39,7 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.addComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "MeshRenderer");
     });
 
     expect(binding.scene.children).toHaveLength(1);
@@ -52,12 +52,12 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.addComponent(entity, "Transform3D", {
+      world.setComponent(entity, "Transform3D", {
         position: [3, 5, 7],
         rotation: [0, 0, 0, 1],
         scale: [1, 1, 1],
       });
-      world.addComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "MeshRenderer");
     });
 
     const obj = binding.get(entity)!;
@@ -71,7 +71,7 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.addComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "MeshRenderer");
     });
     expect(binding.scene.children).toHaveLength(1);
 
@@ -85,7 +85,7 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.addComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "MeshRenderer");
     });
     expect(binding.scene.children).toHaveLength(1);
 
@@ -126,8 +126,8 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.addComponent(entity, "Transform3D");
-      world.addComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "Transform3D");
+      world.setComponent(entity, "MeshRenderer");
     });
 
     const obj = binding.get(entity)!;
@@ -148,7 +148,7 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.addComponent(entity, "MeshRenderer", {
+      world.setComponent(entity, "MeshRenderer", {
         geometry: "box",
         color: [1, 0, 0, 1],
       });
@@ -175,12 +175,12 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.addComponent(entity, "Transform3D", {
+      world.setComponent(entity, "Transform3D", {
         position: [0, 0, 0],
         rotation: [0, 0, 0, 1],
         scale: [1, 1, 1],
       });
-      world.addComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "MeshRenderer");
     });
 
     frame(() => {
@@ -199,7 +199,7 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.addComponent(entity, "MeshRenderer", {
+      world.setComponent(entity, "MeshRenderer", {
         geometry: "box",
         color: [0.8, 0.8, 0.8, 1],
       });

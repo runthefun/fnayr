@@ -13,7 +13,7 @@ describe("EcsWorld change tracking", () => {
     const entity = world.createEntity();
 
     world.beginFrame();
-    world.addComponent(entity, "Transform", { x: 1 });
+    world.setComponent(entity, "Transform", { x: 1 });
 
     expect(world.getAdded("Transform")).toEqual(new Set([entity]));
     expect(world.getRemoved("Transform")).toEqual(new Set());
@@ -31,10 +31,10 @@ describe("EcsWorld change tracking", () => {
   it("tracks updated component data", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.addComponent(entity, "Transform", { x: 2 });
+    world.setComponent(entity, "Transform", { x: 2 });
 
     world.beginFrame();
-    world.addComponent(entity, "Transform", { x: 3 });
+    world.setComponent(entity, "Transform", { x: 3 });
 
     expect(world.getUpdated("Transform")).toEqual(new Set([entity]));
   });
@@ -44,7 +44,7 @@ describe("EcsWorld change tracking", () => {
     const entity = world.createEntity();
 
     world.beginFrame();
-    world.addComponent(entity, "Name", { label: "Hero" });
+    world.setComponent(entity, "Name", { label: "Hero" });
     expect(world.getAdded("Name")).toEqual(new Set([entity]));
 
     world.endFrame();

@@ -39,8 +39,10 @@ function applyTransform(
  * into the Three.js scene graph managed by the given binding.
  */
 export function createRenderSyncSystem<R extends RenderRegistry>(
-  binding: ThreeBinding<R>
+  binding: ThreeBinding<R>,
+  options?: { shouldSkipTransform?: (entity: number) => boolean }
 ): System<R> {
+  const shouldSkipTransform = options?.shouldSkipTransform;
   const handledThisFrame = new Set<number>();
 
   return (world: World<R>, _dt: number, _commands: Commands<R>) => {
@@ -58,6 +60,7 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
         transparent: mr.color[3] < 1,
       });
       const mesh = new THREE.Mesh(geometry, material);
+      mesh.userData.entityId = entity;
 
       const transform = world.getComponent(entity, "Transform3D" as any) as any;
       if (transform) {
@@ -77,6 +80,7 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
     // 3. Updated/Added Transform3D — sync transform
     for (const entity of world.getAdded("Transform3D" as any)) {
       if (handledThisFrame.has(entity)) continue;
+      if (shouldSkipTransform?.(entity)) continue;
       const obj = binding.get(entity);
       if (!obj) continue;
       const transform = world.getComponent(entity, "Transform3D" as any) as any;
@@ -84,6 +88,7 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
     }
     for (const entity of world.getUpdated("Transform3D" as any)) {
       if (handledThisFrame.has(entity)) continue;
+      if (shouldSkipTransform?.(entity)) continue;
       const obj = binding.get(entity);
       if (!obj) continue;
       const transform = world.getComponent(entity, "Transform3D" as any) as any;
