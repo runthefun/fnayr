@@ -7,9 +7,26 @@
     <style>
       body { margin: 0; overflow: hidden; }
       canvas { display: block; }
+      #controls {
+        position: fixed;
+        bottom: 16px;
+        left: 16px;
+        color: #fff;
+        font: 14px/1.6 monospace;
+        background: rgba(0,0,0,0.5);
+        padding: 8px 12px;
+        border-radius: 6px;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
+    <div id="controls">
+      WASD / Arrows — move box<br>
+      Click + drag — orbit camera<br>
+      Scroll — zoom<br>
+      Space — cycle color
+    </div>
     <script type="module" src="/src/demo/three-demo.ts"></script>
   </body>
 </html>

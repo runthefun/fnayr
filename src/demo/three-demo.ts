@@ -6,6 +6,8 @@ import { CommandBuffer } from "../engine/ecs/commands";
 import { renderingRegistry } from "../engine/rendering/components";
 import { ThreeBinding } from "../engine/rendering/binding";
 import { createRenderSyncSystem } from "../engine/rendering/systems";
+import { InputBinding } from "../engine/input/input";
+import { createInputSystem } from "../engine/input/systems";
 
 type Registry = typeof renderingRegistry;
 
@@ -31,6 +33,10 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+// --- Input ---
+
+const input = new InputBinding(window);
+
 // --- ECS World ---
 
 const world = createWorld(renderingRegistry);
@@ -45,7 +51,53 @@ binding.scene.add(directional);
 
 // --- Systems ---
 
-const scheduler = new Scheduler(world, ["update", "render"]);
+const scheduler = new Scheduler(world, ["input", "update", "render"]);
+
+// Input system — polls the binding once per frame
+scheduler.addSystem("input", createInputSystem<Registry>(input));
+
+// Movement system — WASD moves the box on the XZ plane
+const MOVE_SPEED = 4;
+const movementSystem = (w: World<Registry>, dt: number) => {
+  for (const { entity } of w.query(["Spin", "Transform3D"])) {
+    const transform = w.getMut(entity, "Transform3D")!;
+    const pos = [...transform.position] as [number, number, number];
+
+    if (input.isKeyDown("KeyW") || input.isKeyDown("ArrowUp")) pos[2] -= MOVE_SPEED * dt;
+    if (input.isKeyDown("KeyS") || input.isKeyDown("ArrowDown")) pos[2] += MOVE_SPEED * dt;
+    if (input.isKeyDown("KeyA") || input.isKeyDown("ArrowLeft")) pos[0] -= MOVE_SPEED * dt;
+    if (input.isKeyDown("KeyD") || input.isKeyDown("ArrowRight")) pos[0] += MOVE_SPEED * dt;
+
+    transform.position = pos;
+  }
+};
+
+// Camera orbit system — right-click drag orbits the camera around the origin
+let orbitYaw = Math.atan2(camera.position.x, camera.position.z);
+let orbitPitch = Math.asin(camera.position.y / camera.position.length());
+const orbitRadius = camera.position.length();
+const ORBIT_SENSITIVITY = 0.003;
+
+const cameraSystem = () => {
+  if (input.mouse.buttons[2].down || input.mouse.buttons[0].down) {
+    orbitYaw -= input.mouse.dx * ORBIT_SENSITIVITY;
+    orbitPitch += input.mouse.dy * ORBIT_SENSITIVITY;
+    orbitPitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, orbitPitch));
+  }
+
+  // Scroll to zoom
+  if (input.mouse.scrollY !== 0) {
+    const zoomFactor = 1 + input.mouse.scrollY * 0.001;
+    camera.position.multiplyScalar(Math.max(0.5, Math.min(zoomFactor, 2)));
+  }
+
+  camera.position.set(
+    orbitRadius * Math.cos(orbitPitch) * Math.sin(orbitYaw),
+    orbitRadius * Math.sin(orbitPitch),
+    orbitRadius * Math.cos(orbitPitch) * Math.cos(orbitYaw)
+  );
+  camera.lookAt(0, 0.5, 0);
+};
 
 // Spin system — rotates entities with the Spin component
 const spinSystem = (
@@ -76,8 +128,30 @@ const spinSystem = (
   }
 };
 
+// Color cycle system — Space toggles the box color
+let colorIndex = 0;
+const COLORS: [number, number, number, number][] = [
+  [0.9, 0.15, 0.15, 1],
+  [0.15, 0.5, 0.9, 1],
+  [0.9, 0.8, 0.1, 1],
+  [0.8, 0.2, 0.8, 1],
+];
+
+const colorCycleSystem = (w: World<Registry>) => {
+  if (!input.isKeyJustPressed("Space")) return;
+  colorIndex = (colorIndex + 1) % COLORS.length;
+  for (const { entity } of w.query(["Spin", "MeshRenderer"])) {
+    const mr = w.getMut(entity, "MeshRenderer")!;
+    mr.color = COLORS[colorIndex];
+  }
+};
+
 const renderSync = createRenderSyncSystem(binding);
+
+scheduler.addSystem("update", movementSystem);
 scheduler.addSystem("update", spinSystem);
+scheduler.addSystem("update", colorCycleSystem);
+scheduler.addSystem("update", cameraSystem);
 scheduler.addSystem("render", renderSync);
 
 // --- Spawn Entities (inside a bootstrap frame so change tracking picks them up) ---
