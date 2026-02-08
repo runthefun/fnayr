@@ -5,7 +5,9 @@ import type {
   ObjectSchema,
   EnumSchema,
   TaggedUnionSchema,
+  OptionalSchema,
 } from "../../engine/schema";
+import { getDefault } from "../../engine/schema";
 import { NumberField } from "./NumberField";
 import { StringField } from "./StringField";
 import { BooleanField } from "./BooleanField";
@@ -158,6 +160,35 @@ export function SchemaField({ value, schema, onChange }: Props) {
           onChange={onChange as (v: Record<string, unknown>) => void}
         />
       );
+
+    case "optional": {
+      const optSchema = schema as OptionalSchema;
+      const enabled = value !== undefined && value !== null;
+      return (
+        <div className="flex flex-col gap-1">
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => {
+                onChange(e.target.checked ? getDefault(optSchema.inner) : undefined);
+              }}
+              className="accent-blue-500"
+            />
+            <span className="text-muted text-[10px]">
+              {enabled ? "set" : "none"}
+            </span>
+          </label>
+          {enabled && (
+            <SchemaField
+              value={value}
+              schema={optSchema.inner}
+              onChange={onChange}
+            />
+          )}
+        </div>
+      );
+    }
 
     default:
       return (

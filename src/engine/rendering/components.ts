@@ -50,7 +50,7 @@ export const VisualRenderer = defineSchema(
     }),
     model: s.object({
       kind: s.literal("model"),
-      asset: assetRef("glb"),
+      asset: assetRef("glb", { hidden: ["sub", "options"] }),
     }),
   })
 );

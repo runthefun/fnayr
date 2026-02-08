@@ -74,6 +74,14 @@ export class GizmoManager {
     this.controls.dispose();
   }
 
+  /** Re-check that the attached object is still valid. Call once per frame. */
+  tick(): void {
+    if (this._attachedEntity == null) return;
+    const obj = this.binding.get(this._attachedEntity);
+    if (obj && obj === this.controls.object) return;
+    this.syncToSelection();
+  }
+
   private syncToSelection(): void {
     const entity = this.store.getSelectedEntity();
     if (entity == null) {

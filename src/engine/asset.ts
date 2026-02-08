@@ -25,16 +25,34 @@ export const assetTypeValues = [
 export type AssetType = (typeof assetTypeValues)[number];
 export type AssetOptions = Record<string, JsonValue>;
 
-export function assetRef<const T extends readonly AssetType[]>(...types: T) {
+type AssetRefOptions = {
+  /** Property names to hide in the editor UI. */
+  hidden?: string[];
+};
+
+export function assetRef<const T extends readonly AssetType[]>(
+  ...args: [...T] | [...T, AssetRefOptions]
+) {
+  const opts: AssetRefOptions =
+    typeof args[args.length - 1] === "object" && !Array.isArray(args[args.length - 1]) && typeof args[args.length - 1] !== "string"
+      ? (args.pop() as AssetRefOptions)
+      : {};
+  const types = args as unknown as T;
+  const hide = new Set(opts.hidden);
+
   const typeSchema =
-    types.length === 1 ? s.literal(types[0]) : s.enum(types);
+    types.length === 1 ? s.literal(types[0] as string) : s.enum(types as unknown as readonly string[]);
+
+  const mark = <S extends SchemaLike>(schema: S, key: string): S =>
+    hide.has(key) ? { ...schema, meta: { ...schema.meta, hidden: true } } : schema;
+
   return defineSchema({
     ...s.object({
       kind: s.literal("asset"),
       type: typeSchema,
       uri: s.string(),
-      sub: s.optional(s.string()),
-      options: s.optional(s.object({}, { allowUnknown: true })),
+      sub: mark(s.optional(s.string()), "sub"),
+      options: mark(s.optional(s.object({}, { allowUnknown: true })), "options"),
     }),
     meta: { kind: "assetRef" },
   });

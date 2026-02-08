@@ -2,10 +2,13 @@ import * as THREE from "three";
 import { createWorld, EcsWorld } from "../engine/ecs/world";
 import { CommandBuffer } from "../engine/ecs/commands";
 import { Hierarchy } from "../engine/ecs/hierarchy";
-import { renderingRegistry } from "../engine/rendering/components";
+import { renderingRegistry, renderingResources } from "../engine/rendering/components";
 import { ThreeBinding } from "../engine/rendering/binding";
-import { createRenderSyncSystem, createTransformSyncSystem } from "../engine/rendering/systems";
+import { createRenderSyncSystem, createTransformSyncSystem, createAssetRequestSystem, createModelResolveSystem } from "../engine/rendering/systems";
+import type { SlotEntry } from "../engine/rendering/systems";
 import { createLightSyncSystem } from "../engine/rendering/lights";
+import { GltfAssetLoader } from "../engine/rendering/loaders";
+import { AssetManager } from "../engine/assets";
 import { EDITOR_LAYER } from "../engine/rendering/constants";
 import { EditorStore } from "./EditorStore";
 import { GizmoManager } from "./GizmoManager";
@@ -34,16 +37,23 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   camera.lookAt(0, 0.5, 0);
   camera.layers.enable(EDITOR_LAYER);
 
-  const world = createWorld(renderingRegistry);
+  const world = createWorld(renderingRegistry, { resources: renderingResources });
   const binding = new ThreeBinding(world);
   const hierarchy = new Hierarchy(world);
   const store = new EditorStore(world);
+
+  // Asset pipeline
+  const assetManager = new AssetManager();
+  assetManager.registerLoader("glb", new GltfAssetLoader());
+  const slots: Map<string, SlotEntry> = new Map();
 
   const gizmo = new GizmoManager(world, binding, store, camera, canvas);
   const controls = new EditorCameraControls(camera, canvas);
   controls.attach();
 
   const renderSync = createRenderSyncSystem(binding);
+  const assetRequestSync = createAssetRequestSystem(assetManager, slots, renderingRegistry);
+  const modelResolveSync = createModelResolveSystem(assetManager, binding, slots);
   const lightSync = createLightSyncSystem(binding.scene);
   const transformSync = createTransformSyncSystem(binding, {
     shouldSkipTransform: (entity) =>
@@ -99,6 +109,8 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
 
   // Run sync systems to build initial scene graph
   renderSync(world, 0, commands);
+  assetRequestSync(world as any, 0, commands as any);
+  modelResolveSync(world as any, 0, commands as any);
   lightSync(world, 0, commands);
   transformSync(world, 0, commands);
   commands.flush();
@@ -115,9 +127,12 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
 
     controls.update(dt);
     renderSync(world, 0, commands);
+    assetRequestSync(world as any, 0, commands as any);
+    modelResolveSync(world as any, 0, commands as any);
     lightSync(world, 0, commands);
     transformSync(world, 0, commands);
     commands.flush();
+    gizmo.tick();
     world.flushChanges();
     renderer.render(binding.scene, camera);
     rafId = requestAnimationFrame(loop);
@@ -129,6 +144,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     controls.dispose();
     gizmo.dispose();
     store.dispose();
+    assetManager.dispose();
     binding.dispose();
     renderer.dispose();
   }
