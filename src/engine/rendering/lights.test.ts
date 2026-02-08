@@ -4,7 +4,7 @@ import { createWorld } from "../ecs/world";
 import { renderingRegistry } from "./components";
 import { ThreeBinding } from "./binding";
 import { CommandBuffer } from "../ecs/commands";
-import { createLightSyncSystem } from "./lights";
+import { createLightSyncSystem, createBackgroundSyncSystem } from "./lights";
 import { createTransformSyncSystem } from "./systems";
 import { EDITOR_LAYER } from "./constants";
 
@@ -620,5 +620,163 @@ describe("Light sync system", () => {
     expect(
       ctx.scene.children.find((c) => c instanceof THREE.SpotLightHelper)
     ).toBeUndefined();
+  });
+});
+
+describe("Background sync system", () => {
+  function setupBg() {
+    const world = createWorld(renderingRegistry);
+    const scene = new THREE.Scene();
+    const commands = new CommandBuffer(world);
+    const bgSync = createBackgroundSyncSystem(scene);
+    return { world, scene, commands, bgSync };
+  }
+
+  function runBgFrame(ctx: ReturnType<typeof setupBg>, fn?: () => void) {
+    ctx.world.beginFrame();
+    fn?.();
+    ctx.bgSync(ctx.world, 0, ctx.commands);
+    ctx.commands.flush();
+    ctx.world.endFrame();
+  }
+
+  it("Background added -> scene.background is set", () => {
+    const ctx = setupBg();
+    const entity = ctx.world.createEntity();
+
+    runBgFrame(ctx, () => {
+      ctx.world.setComponent(entity, "Background", {
+        color: [0.2, 0.4, 0.6, 1],
+        intensity: 1,
+        blurriness: 0,
+      });
+    });
+
+    expect(ctx.scene.background).toBeInstanceOf(THREE.Color);
+    const bg = ctx.scene.background as THREE.Color;
+    expect(bg.r).toBeCloseTo(0.2);
+    expect(bg.g).toBeCloseTo(0.4);
+    expect(bg.b).toBeCloseTo(0.6);
+  });
+
+  it("Background updated -> scene.background is updated", () => {
+    const ctx = setupBg();
+    const entity = ctx.world.createEntity();
+
+    runBgFrame(ctx, () => {
+      ctx.world.setComponent(entity, "Background", {
+        color: [0.1, 0.1, 0.1, 1],
+        intensity: 1,
+        blurriness: 0,
+      });
+    });
+
+    runBgFrame(ctx, () => {
+      const data = ctx.world.getMut(entity, "Background")!;
+      data.color = [1, 0, 0, 1];
+    });
+
+    const bg = ctx.scene.background as THREE.Color;
+    expect(bg.r).toBeCloseTo(1);
+    expect(bg.g).toBeCloseTo(0);
+    expect(bg.b).toBeCloseTo(0);
+  });
+
+  it("Background removed -> scene.background is null", () => {
+    const ctx = setupBg();
+    const entity = ctx.world.createEntity();
+
+    runBgFrame(ctx, () => {
+      ctx.world.setComponent(entity, "Background", {
+        color: [0.5, 0.5, 0.5, 1],
+        intensity: 1,
+        blurriness: 0,
+      });
+    });
+
+    expect(ctx.scene.background).not.toBeNull();
+
+    runBgFrame(ctx, () => {
+      ctx.world.removeComponent(entity, "Background");
+    });
+
+    expect(ctx.scene.background).toBeNull();
+  });
+
+  it("schema defaults produce valid background", () => {
+    const ctx = setupBg();
+    const entity = ctx.world.createEntity();
+
+    runBgFrame(ctx, () => {
+      ctx.world.setComponent(entity, "Background");
+    });
+
+    expect(ctx.scene.background).toBeInstanceOf(THREE.Color);
+    const bg = ctx.scene.background as THREE.Color;
+    // Default colorTuple is [0.8, 0.8, 0.8, 1.0]
+    expect(bg.r).toBeCloseTo(0.8);
+    expect(bg.g).toBeCloseTo(0.8);
+    expect(bg.b).toBeCloseTo(0.8);
+    expect(ctx.scene.backgroundIntensity).toBe(1);
+    expect(ctx.scene.backgroundBlurriness).toBe(0);
+  });
+
+  it("intensity and blurriness are applied on add", () => {
+    const ctx = setupBg();
+    const entity = ctx.world.createEntity();
+
+    runBgFrame(ctx, () => {
+      ctx.world.setComponent(entity, "Background", {
+        color: [0, 0, 0, 1],
+        intensity: 2.5,
+        blurriness: 0.7,
+      });
+    });
+
+    expect(ctx.scene.backgroundIntensity).toBe(2.5);
+    expect(ctx.scene.backgroundBlurriness).toBeCloseTo(0.7);
+  });
+
+  it("intensity and blurriness update on change", () => {
+    const ctx = setupBg();
+    const entity = ctx.world.createEntity();
+
+    runBgFrame(ctx, () => {
+      ctx.world.setComponent(entity, "Background", {
+        color: [0, 0, 0, 1],
+        intensity: 1,
+        blurriness: 0,
+      });
+    });
+
+    runBgFrame(ctx, () => {
+      const data = ctx.world.getMut(entity, "Background")!;
+      data.intensity = 0.5;
+      data.blurriness = 0.3;
+    });
+
+    expect(ctx.scene.backgroundIntensity).toBe(0.5);
+    expect(ctx.scene.backgroundBlurriness).toBeCloseTo(0.3);
+  });
+
+  it("removal resets intensity and blurriness to defaults", () => {
+    const ctx = setupBg();
+    const entity = ctx.world.createEntity();
+
+    runBgFrame(ctx, () => {
+      ctx.world.setComponent(entity, "Background", {
+        color: [0, 0, 0, 1],
+        intensity: 3,
+        blurriness: 0.9,
+      });
+    });
+
+    runBgFrame(ctx, () => {
+      ctx.world.removeComponent(entity, "Background");
+    });
+
+    expect(ctx.scene.background).toBeNull();
+    expect(ctx.scene.backgroundIntensity).toBe(1);
+    expect(ctx.scene.backgroundBlurriness).toBe(0);
   });
 });

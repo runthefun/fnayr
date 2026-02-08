@@ -76,7 +76,13 @@ export class GizmoManager {
 
   /** Re-check that the attached object is still valid. Call once per frame. */
   tick(): void {
-    if (this._attachedEntity == null) return;
+    if (this._attachedEntity == null) {
+      // An entity may be selected but not yet attached (e.g. async model load).
+      if (this.store.getSelectedEntity() != null) {
+        this.syncToSelection();
+      }
+      return;
+    }
     const obj = this.binding.get(this._attachedEntity);
     if (obj && obj === this.controls.object) return;
     this.syncToSelection();

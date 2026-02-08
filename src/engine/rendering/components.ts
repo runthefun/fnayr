@@ -97,6 +97,14 @@ export const SpotLight = defineSchema(
   })
 );
 
+export const Background = defineSchema(
+  s.object({
+    color: colorTuple,
+    intensity: s.number({ default: 1, min: 0 }),
+    blurriness: s.number({ default: 0, min: 0, max: 1 }),
+  })
+);
+
 export const LoadingState = defineSchema(
   s.object({
     pending: s.number({ integer: true, default: 0 }),
@@ -119,4 +127,5 @@ export const renderingRegistry = {
   AmbientLight,
   PointLight,
   SpotLight,
+  Background,
 } as const;
