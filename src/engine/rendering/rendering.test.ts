@@ -27,12 +27,12 @@ describe("Rendering bridge", () => {
     return { world, binding, frame };
   }
 
-  it("MeshRenderer added → Mesh appears in scene", () => {
+  it("VisualRenderer mesh added → Mesh appears in scene", () => {
     const { world, binding, frame } = setup();
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "VisualRenderer");
     });
 
     expect(binding.scene.children).toHaveLength(1);
@@ -50,7 +50,7 @@ describe("Rendering bridge", () => {
         rotation: [0, 0, 0, 1],
         scale: [1, 1, 1],
       });
-      world.setComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "VisualRenderer");
     });
 
     const obj = binding.get(entity)!;
@@ -64,7 +64,7 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "VisualRenderer");
     });
     expect(binding.scene.children).toHaveLength(1);
 
@@ -73,17 +73,17 @@ describe("Rendering bridge", () => {
     expect(binding.get(entity)).toBeUndefined();
   });
 
-  it("MeshRenderer removed → Mesh removed from scene", () => {
+  it("VisualRenderer removed → Mesh removed from scene", () => {
     const { world, binding, frame } = setup();
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "VisualRenderer");
     });
     expect(binding.scene.children).toHaveLength(1);
 
     frame(() => {
-      world.removeComponent(entity, "MeshRenderer");
+      world.removeComponent(entity, "VisualRenderer");
     });
 
     expect(binding.scene.children).toHaveLength(0);
@@ -96,7 +96,7 @@ describe("Rendering bridge", () => {
     let entities: number[];
     frame(() => {
       entities = world.spawn(3, {
-        MeshRenderer: { geometry: "box", color: [1, 0, 0, 1] },
+        VisualRenderer: { kind: "mesh", geometry: "box", color: [1, 0, 0, 1] },
         Transform3D: (i: number) => ({
           position: [i * 2, 0, 0] as [number, number, number],
           rotation: [0, 0, 0, 1] as [number, number, number, number],
@@ -120,7 +120,7 @@ describe("Rendering bridge", () => {
 
     frame(() => {
       world.setComponent(entity, "Transform3D");
-      world.setComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "VisualRenderer");
     });
 
     const obj = binding.get(entity)!;
@@ -141,7 +141,8 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "MeshRenderer", {
+      world.setComponent(entity, "VisualRenderer", {
+        kind: "mesh",
         geometry: "box",
         color: [1, 0, 0, 1],
       });
@@ -154,8 +155,8 @@ describe("Rendering bridge", () => {
     expect(mat.color.b).toBe(0);
 
     frame(() => {
-      const mr = world.getMut(entity, "MeshRenderer")!;
-      mr.color = [0, 1, 0, 1];
+      const mr = world.getMut(entity, "VisualRenderer")!;
+      if (mr.kind === "mesh") mr.color = [0, 1, 0, 1];
     });
 
     expect(mat.color.r).toBe(0);
@@ -173,7 +174,7 @@ describe("Rendering bridge", () => {
         rotation: [0, 0, 0, 1],
         scale: [1, 1, 1],
       });
-      world.setComponent(entity, "MeshRenderer");
+      world.setComponent(entity, "VisualRenderer");
     });
 
     frame(() => {
@@ -192,7 +193,8 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "MeshRenderer", {
+      world.setComponent(entity, "VisualRenderer", {
+        kind: "mesh",
         geometry: "box",
         color: [0.8, 0.8, 0.8, 1],
       });
@@ -202,8 +204,8 @@ describe("Rendering bridge", () => {
     expect(mesh.geometry).toBeInstanceOf(THREE.BoxGeometry);
 
     frame(() => {
-      const mr = world.getMut(entity, "MeshRenderer")!;
-      mr.geometry = "sphere";
+      const mr = world.getMut(entity, "VisualRenderer")!;
+      if (mr.kind === "mesh") mr.geometry = "sphere";
     });
 
     expect(mesh.geometry).toBeInstanceOf(THREE.SphereGeometry);
@@ -214,7 +216,8 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "MeshRenderer", {
+      world.setComponent(entity, "VisualRenderer", {
+        kind: "mesh",
         geometry: "box",
         color: [1, 0, 0, 1],
       });

@@ -41,16 +41,17 @@ export const Transform3D = defineSchema(
   })
 );
 
-export const MeshRenderer = defineSchema(
-  s.object({
-    geometry: s.enum(["box", "sphere", "plane"] as const, { default: "box" }),
-    color: colorTuple,
-  })
-);
-
-export const ModelRenderer = defineSchema(
-  s.object({
-    asset: assetRefSchema,
+export const VisualRenderer = defineSchema(
+  s.tagged("kind", {
+    mesh: s.object({
+      kind: s.literal("mesh"),
+      geometry: s.enum(["box", "sphere", "plane"] as const, { default: "box" }),
+      color: colorTuple,
+    }),
+    model: s.object({
+      kind: s.literal("model"),
+      asset: assetRefSchema,
+    }),
   })
 );
 
@@ -112,8 +113,7 @@ export const renderingResources = {
 
 export const renderingRegistry = {
   Transform3D,
-  MeshRenderer,
-  ModelRenderer,
+  VisualRenderer,
   Spin,
   DirectionalLight,
   AmbientLight,

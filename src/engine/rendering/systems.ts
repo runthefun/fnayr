@@ -48,93 +48,90 @@ export function applyTransform(
   obj.scale.set(data.scale[0], data.scale[1], data.scale[2]);
 }
 
+function createMeshObject(
+  mr: any,
+  entity: number,
+  world: World<any>,
+  binding: ThreeBinding<any>,
+): void {
+  const geometry = createGeometry(mr.geometry);
+  const material = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(mr.color[0], mr.color[1], mr.color[2]),
+    opacity: mr.color[3],
+    transparent: mr.color[3] < 1,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.userData.entityId = entity;
+
+  const transform = world.getComponent(entity, "Transform3D" as any) as any;
+  if (transform) {
+    applyTransform(mesh, transform);
+  }
+
+  binding.set(entity, mesh);
+  binding.scene.add(mesh);
+}
+
 /**
- * Creates a system that synchronizes ECS MeshRenderer components
+ * Creates a system that synchronizes ECS VisualRenderer components
  * into the Three.js scene graph managed by the given binding.
  */
 export function createRenderSyncSystem<R extends RenderRegistry>(
   binding: ThreeBinding<R>,
 ): System<R> {
   return (world: World<R>, _dt: number, _commands: Commands<R>) => {
-    // 1. Added MeshRenderer — create mesh and add to scene
-    for (const entity of world.getAdded("MeshRenderer" as any)) {
-      if (world.hasComponent(entity, "ModelRenderer" as any)) continue;
-      const mr = world.getComponent(entity, "MeshRenderer" as any) as any;
-      if (!mr) continue;
+    // 1. Added VisualRenderer
+    for (const entity of world.getAdded("VisualRenderer" as any)) {
+      const vr = world.getComponent(entity, "VisualRenderer" as any) as any;
+      if (!vr) continue;
 
-      const geometry = createGeometry(mr.geometry);
-      const material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(mr.color[0], mr.color[1], mr.color[2]),
-        opacity: mr.color[3],
-        transparent: mr.color[3] < 1,
-      });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.userData.entityId = entity;
-
-      // Apply initial transform if present
-      const transform = world.getComponent(entity, "Transform3D" as any) as any;
-      if (transform) {
-        applyTransform(mesh, transform);
+      if (vr.kind === "mesh") {
+        createMeshObject(vr, entity, world, binding);
       }
-
-      binding.set(entity, mesh);
-      binding.scene.add(mesh);
+      // kind === "model": skip (handled by model resolve)
     }
 
-    // 2. Removed MeshRenderer — remove from scene
-    for (const entity of world.getRemoved("MeshRenderer" as any)) {
-      if (world.hasComponent(entity, "ModelRenderer" as any)) continue;
+    // 2. Removed VisualRenderer — delete binding
+    for (const entity of world.getRemoved("VisualRenderer" as any)) {
       binding.delete(entity);
     }
 
-    // 2b. ModelRenderer removed — re-create mesh for surviving MeshRenderer
-    for (const entity of world.getRemoved("ModelRenderer" as any)) {
-      if (!world.hasComponent(entity, "MeshRenderer" as any)) continue;
-      if (binding.has(entity)) continue;
-      const mr = world.getComponent(entity, "MeshRenderer" as any) as any;
-      if (!mr) continue;
+    // 3. Updated VisualRenderer — dispatch on kind
+    for (const entity of world.getUpdated("VisualRenderer" as any)) {
+      const vr = world.getComponent(entity, "VisualRenderer" as any) as any;
+      if (!vr) continue;
 
-      const geometry = createGeometry(mr.geometry);
-      const material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(mr.color[0], mr.color[1], mr.color[2]),
-        opacity: mr.color[3],
-        transparent: mr.color[3] < 1,
-      });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.userData.entityId = entity;
+      if (vr.kind === "mesh") {
+        const obj = binding.get(entity);
+        if (!obj || !(obj instanceof THREE.Mesh)) {
+          // Was model (or nothing) — delete old binding and create mesh
+          binding.delete(entity);
+          createMeshObject(vr, entity, world, binding);
+        } else {
+          // Update material color
+          const mat = obj.material as THREE.MeshStandardMaterial;
+          mat.color.setRGB(vr.color[0], vr.color[1], vr.color[2]);
+          mat.opacity = vr.color[3];
+          mat.transparent = vr.color[3] < 1;
 
-      const transform = world.getComponent(entity, "Transform3D" as any) as any;
-      if (transform) {
-        applyTransform(mesh, transform);
-      }
-
-      binding.set(entity, mesh);
-      binding.scene.add(mesh);
-    }
-
-    // 3. Updated MeshRenderer — update material/geometry
-    for (const entity of world.getUpdated("MeshRenderer" as any)) {
-      const obj = binding.get(entity);
-      if (!obj || !(obj instanceof THREE.Mesh)) continue;
-      const mr = world.getComponent(entity, "MeshRenderer" as any) as any;
-      if (!mr) continue;
-
-      // Update material color
-      const mat = obj.material as THREE.MeshStandardMaterial;
-      mat.color.setRGB(mr.color[0], mr.color[1], mr.color[2]);
-      mat.opacity = mr.color[3];
-      mat.transparent = mr.color[3] < 1;
-
-      // Swap geometry if type changed
-      const currentGeoType =
-        obj.geometry instanceof THREE.BoxGeometry
-          ? "box"
-          : obj.geometry instanceof THREE.SphereGeometry
-            ? "sphere"
-            : "plane";
-      if (currentGeoType !== mr.geometry) {
-        obj.geometry.dispose();
-        obj.geometry = createGeometry(mr.geometry);
+          // Swap geometry if type changed
+          const currentGeoType =
+            obj.geometry instanceof THREE.BoxGeometry
+              ? "box"
+              : obj.geometry instanceof THREE.SphereGeometry
+                ? "sphere"
+                : "plane";
+          if (currentGeoType !== vr.geometry) {
+            obj.geometry.dispose();
+            obj.geometry = createGeometry(vr.geometry);
+          }
+        }
+      } else if (vr.kind === "model") {
+        const obj = binding.get(entity);
+        if (obj && obj instanceof THREE.Mesh) {
+          // Was mesh — delete it (model resolve will handle async load)
+          binding.delete(entity);
+        }
       }
     }
   };
@@ -217,7 +214,22 @@ function findAssetRefPaths(
       const opt = schema as unknown as { inner: SchemaLike };
       return walk(opt.inner, path);
     }
-    // Skip array, tuple, map, taggedUnion
+    if (schema.type === "taggedUnion") {
+      const tu = schema as unknown as { variants: Record<string, SchemaLike> };
+      const seen = new Set<string>();
+      const found: string[][] = [];
+      for (const variantSchema of Object.values(tu.variants)) {
+        for (const p of walk(variantSchema, path)) {
+          const key = p.join(".");
+          if (!seen.has(key)) {
+            seen.add(key);
+            found.push(p);
+          }
+        }
+      }
+      return found;
+    }
+    // Skip array, tuple, map
     return [];
   }
 
@@ -326,7 +338,14 @@ export function createAssetRequestSystem(
     emptyUriCleanup: Set<string>,
   ): void {
     const ref = extractRef(entity, componentType, world);
-    if (!ref) return;
+    if (!ref) {
+      // Variant switched away from asset-bearing (e.g. model→mesh): clean up existing slot
+      const sk = slotKey(entity, componentType);
+      if (slots.has(sk)) {
+        emptyUriCleanup.add(sk);
+      }
+      return;
+    }
     const sk = slotKey(entity, componentType);
     const existing = slots.get(sk);
 
@@ -578,40 +597,37 @@ export function createModelResolveSystem(
   slots: Map<string, SlotEntry>,
 ): System<RenderRegistry> {
   return (world: World<RenderRegistry>, _dt: number, _commands: Commands<RenderRegistry>) => {
-    // 1. Empty-URI cleanup: updated ModelRenderer with empty URI
-    for (const entity of world.getUpdated("ModelRenderer" as any)) {
-      const mr = world.getComponent(entity, "ModelRenderer" as any) as any;
-      if (mr && !mr.asset?.uri && binding.has(entity)) {
+    // 1. Empty-URI cleanup: updated VisualRenderer with kind=model and empty URI
+    for (const entity of world.getUpdated("VisualRenderer" as any)) {
+      const vr = world.getComponent(entity, "VisualRenderer" as any) as any;
+      if (vr && vr.kind === "model" && !vr.asset?.uri && binding.has(entity)) {
         binding.delete(entity);
       }
     }
 
-    // 2. Model-removal cleanup
-    for (const entity of world.getRemoved("ModelRenderer" as any)) {
-      if (binding.has(entity)) {
-        binding.delete(entity);
-      }
-    }
-
-    // 3. Pre-clear pass: slots with clearOnPending (pending or failed)
+    // 2. Pre-clear pass: slots with clearOnPending (pending or failed)
     for (const [sk, slot] of slots) {
       if ((slot.status === "pending" || slot.status === "failed") && slot.clearOnPending) {
         const entityId = parseInt(sk.split(":")[0], 10);
-        if (!world.isAlive(entityId) || !world.hasComponent(entityId, "ModelRenderer" as any)) continue;
+        if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer" as any)) continue;
+        const vr = world.getComponent(entityId, "VisualRenderer" as any) as any;
+        if (!vr || vr.kind !== "model") continue;
         binding.delete(entityId);
         slot.clearOnPending = false;
       }
     }
 
-    // 4. Path A: newly ready assets
+    // 3. Path A: newly ready assets
     const justReady = assetManager.drainReady();
     if (justReady.size > 0) {
       for (const [sk, slot] of slots) {
         if (slot.status !== "pending") continue;
         if (!justReady.has(slot.key)) continue;
-        if (!sk.endsWith(":ModelRenderer")) continue;
+        if (!sk.endsWith(":VisualRenderer")) continue;
         const entityId = parseInt(sk.split(":")[0], 10);
-        if (!world.isAlive(entityId) || !world.hasComponent(entityId, "ModelRenderer" as any)) continue;
+        if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer" as any)) continue;
+        const vr = world.getComponent(entityId, "VisualRenderer" as any) as any;
+        if (!vr || vr.kind !== "model") continue;
         const entry = assetManager.peek(slot.key);
         if (entry && entry.status === "ready") {
           instantiateGltf(entry.asset as any, slot.sub, entityId, world, binding);
@@ -620,12 +636,14 @@ export function createModelResolveSystem(
       }
     }
 
-    // 5. Path B: cache hits — pending slots whose assets are already ready
+    // 4. Path B: cache hits — pending slots whose assets are already ready
     for (const [sk, slot] of slots) {
       if (slot.status !== "pending") continue;
-      if (!sk.endsWith(":ModelRenderer")) continue;
+      if (!sk.endsWith(":VisualRenderer")) continue;
       const entityId = parseInt(sk.split(":")[0], 10);
-      if (!world.isAlive(entityId) || !world.hasComponent(entityId, "ModelRenderer" as any)) continue;
+      if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer" as any)) continue;
+      const vr = world.getComponent(entityId, "VisualRenderer" as any) as any;
+      if (!vr || vr.kind !== "model") continue;
       const entry = assetManager.peek(slot.key);
       if (entry && entry.status === "ready") {
         instantiateGltf(entry.asset as any, slot.sub, entityId, world, binding);
@@ -633,7 +651,7 @@ export function createModelResolveSystem(
       }
     }
 
-    // 6. Path C: failed assets
+    // 5. Path C: failed assets
     const justFailed = assetManager.drainFailed();
     if (justFailed.size > 0) {
       for (const [, slot] of slots) {

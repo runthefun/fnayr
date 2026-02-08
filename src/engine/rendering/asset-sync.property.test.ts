@@ -160,8 +160,9 @@ type Action =
   | { kind: "settleFail"; uri: string }
   | { kind: "frameOnly" };
 
-function toModelRenderer(ref: AssetRefInput) {
+function toVisualRenderer(ref: AssetRefInput) {
   return {
+    kind: "model",
     asset: {
       kind: "asset",
       type: ref.type,
@@ -196,7 +197,7 @@ function assertCrossSystemInvariants(
 
     const entity = Number(sk.split(":")[0]);
     expect(world.isAlive(entity)).toBe(true);
-    expect(world.hasComponent(entity, "ModelRenderer" as any)).toBe(true);
+    expect(world.hasComponent(entity, "VisualRenderer" as any)).toBe(true);
 
     if (slot.key === "") {
       expect(slot.status).toBe("failed");
@@ -214,9 +215,9 @@ function assertCrossSystemInvariants(
     if (!slots.has(sk)) perSlotLastVersion.delete(sk);
   }
 
-  // No bound object without ModelRenderer in this test setup.
+  // No bound object without VisualRenderer in this test setup.
   for (const entity of entities) {
-    const hasModel = world.hasComponent(entity, "ModelRenderer" as any);
+    const hasModel = world.hasComponent(entity, "VisualRenderer" as any);
     if (!hasModel) {
       expect(binding.has(entity)).toBe(false);
     }
@@ -281,10 +282,10 @@ function assertCrossSystemInvariants(
   const stats = assetManager.getStats();
   expect(stats.total).toBe(stats.loading + stats.ready + stats.error);
 
-  // In this setup, binding size cannot exceed live ModelRenderer count.
+  // In this setup, binding size cannot exceed live VisualRenderer count.
   let modelCount = 0;
   for (const entity of entities) {
-    if (world.hasComponent(entity, "ModelRenderer" as any)) modelCount++;
+    if (world.hasComponent(entity, "VisualRenderer" as any)) modelCount++;
   }
   expect(countBindingEntries(binding)).toBeLessThanOrEqual(modelCount);
 }
@@ -296,24 +297,24 @@ async function applyAction(ctx: Setup, action: Action) {
   switch (action.kind) {
     case "set":
       frame(() => {
-        world.setComponent(entity(action.entityIndex), "ModelRenderer" as any, toModelRenderer(action.ref));
+        world.setComponent(entity(action.entityIndex), "VisualRenderer" as any, toVisualRenderer(action.ref));
       });
       break;
 
     case "mutate":
       frame(() => {
         const e = entity(action.entityIndex);
-        if (!world.hasComponent(e, "ModelRenderer" as any)) return;
-        const mr = world.getMut(e, "ModelRenderer" as any) as any;
-        mr.asset = toModelRenderer(action.ref).asset;
+        if (!world.hasComponent(e, "VisualRenderer" as any)) return;
+        const mr = world.getMut(e, "VisualRenderer" as any) as any;
+        mr.asset = toVisualRenderer(action.ref).asset;
       });
       break;
 
     case "remove":
       frame(() => {
         const e = entity(action.entityIndex);
-        if (world.hasComponent(e, "ModelRenderer" as any)) {
-          world.removeComponent(e, "ModelRenderer" as any);
+        if (world.hasComponent(e, "VisualRenderer" as any)) {
+          world.removeComponent(e, "VisualRenderer" as any);
         }
       });
       break;
@@ -321,9 +322,9 @@ async function applyAction(ctx: Setup, action: Action) {
     case "multiWrite":
       frame(() => {
         const e = entity(action.entityIndex);
-        world.setComponent(e, "ModelRenderer" as any, toModelRenderer(action.first));
-        const mr = world.getMut(e, "ModelRenderer" as any) as any;
-        if (mr) mr.asset = toModelRenderer(action.second).asset;
+        world.setComponent(e, "VisualRenderer" as any, toVisualRenderer(action.first));
+        const mr = world.getMut(e, "VisualRenderer" as any) as any;
+        if (mr) mr.asset = toVisualRenderer(action.second).asset;
       });
       break;
 
