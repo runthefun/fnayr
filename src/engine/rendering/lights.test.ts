@@ -646,7 +646,7 @@ describe("Background sync system", () => {
 
     runBgFrame(ctx, () => {
       ctx.world.setComponent(entity, "Background", {
-        color: [0.2, 0.4, 0.6, 1],
+        color: [0.2, 0.4, 0.6],
         intensity: 1,
         blurriness: 0,
       });
@@ -665,7 +665,7 @@ describe("Background sync system", () => {
 
     runBgFrame(ctx, () => {
       ctx.world.setComponent(entity, "Background", {
-        color: [0.1, 0.1, 0.1, 1],
+        color: [0.1, 0.1, 0.1],
         intensity: 1,
         blurriness: 0,
       });
@@ -673,7 +673,7 @@ describe("Background sync system", () => {
 
     runBgFrame(ctx, () => {
       const data = ctx.world.getMut(entity, "Background")!;
-      data.color = [1, 0, 0, 1];
+      data.color = [1, 0, 0];
     });
 
     const bg = ctx.scene.background as THREE.Color;
@@ -688,7 +688,7 @@ describe("Background sync system", () => {
 
     runBgFrame(ctx, () => {
       ctx.world.setComponent(entity, "Background", {
-        color: [0.5, 0.5, 0.5, 1],
+        color: [0.5, 0.5, 0.5],
         intensity: 1,
         blurriness: 0,
       });
@@ -727,7 +727,7 @@ describe("Background sync system", () => {
 
     runBgFrame(ctx, () => {
       ctx.world.setComponent(entity, "Background", {
-        color: [0, 0, 0, 1],
+        color: [0, 0, 0],
         intensity: 2.5,
         blurriness: 0.7,
       });
@@ -743,7 +743,7 @@ describe("Background sync system", () => {
 
     runBgFrame(ctx, () => {
       ctx.world.setComponent(entity, "Background", {
-        color: [0, 0, 0, 1],
+        color: [0, 0, 0],
         intensity: 1,
         blurriness: 0,
       });
@@ -765,7 +765,7 @@ describe("Background sync system", () => {
 
     runBgFrame(ctx, () => {
       ctx.world.setComponent(entity, "Background", {
-        color: [0, 0, 0, 1],
+        color: [0, 0, 0],
         intensity: 3,
         blurriness: 0.9,
       });

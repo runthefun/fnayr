@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NumberSchema } from "../../engine/schema";
 
-const DRAG_THRESHOLD = 3;
-const DRAG_SPEED = 0.05;
+const DRAG_THRESHOLD = 3; // px before a mousedown becomes a drag
+const DRAG_SPEED = 0.05; // value change per pixel of mouse movement
 
-type Props = {
-  label?: string;
+export type DraggableNumberProps = {
   value: number;
   schema: NumberSchema;
-  onChange: (value: number) => void;
+  label: string;
+  onChange: (v: number) => void;
+  speed?: number;
 };
 
 function clampToSchema(v: number, schema: NumberSchema): number {
@@ -21,10 +22,7 @@ function format(v: number) {
   return Number.isInteger(v) ? v.toString() : parseFloat(v.toFixed(3)).toString();
 }
 
-export function NumberField({ label, value, schema, onChange }: Props) {
-  const hasRange = schema.min !== undefined && schema.max !== undefined;
-  const step = schema.integer ? 1 : hasRange ? 0.01 : 0.1;
-
+export function DraggableNumber({ value, schema, label, onChange, speed = DRAG_SPEED }: DraggableNumberProps) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -37,10 +35,13 @@ export function NumberField({ label, value, schema, onChange }: Props) {
 
   const commitEdit = useCallback(() => {
     const v = parseFloat(editText);
-    if (!isNaN(v)) onChange(clampToSchema(v, schema));
+    if (!isNaN(v)) {
+      onChange(clampToSchema(v, schema));
+    }
     setEditing(false);
   }, [editText, onChange, schema]);
 
+  // Focus input when entering edit mode
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus();
@@ -64,14 +65,19 @@ export function NumberField({ label, value, schema, onChange }: Props) {
     const ds = dragState.current;
     if (!ds) return;
     const dx = e.clientX - ds.startX;
-    const dy = -(e.clientY - ds.startY);
+    const dy = -(e.clientY - ds.startY); // invert Y so up = positive
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (!ds.dragging && dist >= DRAG_THRESHOLD) ds.dragging = true;
+
+    if (!ds.dragging && dist >= DRAG_THRESHOLD) {
+      ds.dragging = true;
+    }
+
     if (ds.dragging) {
-      const delta = (dx + dy) * DRAG_SPEED;
-      const s = schema.integer ? 1 : DRAG_SPEED;
+      // Use dx + dy so right/up increases, left/down decreases
+      const delta = (dx + dy) * speed;
+      const step = schema.integer ? 1 : speed;
       const rawVal = ds.startValue + delta;
-      const snapped = schema.integer ? Math.round(rawVal) : Math.round(rawVal / s) * s;
+      const snapped = schema.integer ? Math.round(rawVal) : Math.round(rawVal / step) * step;
       onChange(clampToSchema(snapped, schema));
     }
   };
@@ -80,63 +86,56 @@ export function NumberField({ label, value, schema, onChange }: Props) {
     const ds = dragState.current;
     dragState.current = null;
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+
     if (ds && !ds.dragging) {
+      // It was a click — enter edit mode
       setEditText(format(value));
       setEditing(true);
     }
   };
 
-  return (
-    <label className="flex items-center gap-2">
-      {label && <span className="text-muted w-8 text-right shrink-0">{label}</span>}
-      {hasRange && (
-        <input
-          type="range"
-          value={value}
-          min={schema.min}
-          max={schema.max}
-          step={step}
-          onChange={(e) => {
-            const v = parseFloat(e.target.value);
-            if (!isNaN(v)) onChange(v);
-          }}
-          className="flex-1 min-w-0 accent-blue-500"
-        />
-      )}
-      {editing ? (
+  if (editing) {
+    return (
+      <label className="flex items-center gap-0.5 flex-1 min-w-0">
+        <span className="text-muted text-[10px] shrink-0">{label}</span>
         <input
           ref={inputRef}
           type="number"
           value={editText}
+          step={schema.integer ? 1 : 0.1}
           min={schema.min}
           max={schema.max}
-          step={step}
           onChange={(e) => setEditText(e.target.value)}
           onBlur={commitEdit}
           onKeyDown={(e) => {
             if (e.key === "Enter") commitEdit();
             if (e.key === "Escape") setEditing(false);
           }}
-          className={`bg-input border border-subtle rounded px-1.5 py-0.5 text-primary outline-none focus:border-focus ${hasRange ? "w-16 shrink-0" : "w-full"}`}
+          className="bg-input border border-subtle rounded px-1 py-0.5 w-full text-primary outline-none focus:border-focus min-w-0"
         />
-      ) : (
-        <span
-          tabIndex={0}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setEditText(format(value));
-              setEditing(true);
-            }
-          }}
-          className={`bg-input border border-subtle rounded px-1.5 py-0.5 text-primary cursor-ew-resize select-none truncate text-sm focus:border-focus outline-none ${hasRange ? "w-16 shrink-0" : "w-full"}`}
-        >
-          {format(value)}
-        </span>
-      )}
+      </label>
+    );
+  }
+
+  return (
+    <label className="flex items-center gap-0.5 flex-1 min-w-0">
+      <span className="text-muted text-[10px] shrink-0">{label}</span>
+      <span
+        tabIndex={0}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setEditText(format(value));
+            setEditing(true);
+          }
+        }}
+        className="bg-input border border-subtle rounded px-1 py-0.5 w-full text-primary min-w-0 cursor-ew-resize select-none truncate text-sm focus:border-focus outline-none"
+      >
+        {format(value)}
+      </span>
     </label>
   );
 }

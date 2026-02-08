@@ -131,7 +131,9 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
           const mat = obj.material as THREE.MeshStandardMaterial;
           mat.color.setRGB(vr.color[0], vr.color[1], vr.color[2]);
           mat.opacity = vr.color[3];
+          const wasTransparent = mat.transparent;
           mat.transparent = vr.color[3] < 1;
+          if (mat.transparent !== wasTransparent) mat.needsUpdate = true;
 
           // Swap geometry if type changed
           const currentGeoType =

@@ -33,7 +33,7 @@ export function TaggedUnionField({ value, schema, onChange }: Props) {
         <select
           value={activeVariant}
           onChange={handleVariantChange}
-          className="w-full bg-surface text-primary text-[11px] px-1.5 py-0.5 border border-subtle rounded cursor-pointer"
+          className="w-full bg-surface text-primary text-[11px] px-1.5 py-0.5 border border-subtle rounded cursor-pointer outline-none focus:border-focus"
         >
           {variantKeys.map((v) => (
             <option key={v} value={v}>

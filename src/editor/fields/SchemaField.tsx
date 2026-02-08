@@ -18,22 +18,13 @@ import { ColorField } from "./ColorField";
 import { ObjectField } from "./ObjectField";
 import { TagField } from "./TagField";
 import { TaggedUnionField } from "./TaggedUnionField";
+import { EulerField } from "./EulerField";
 
 type Props = {
   value: unknown;
   schema: SchemaLike;
   onChange: (value: unknown) => void;
 };
-
-function isColorTuple(schema: TupleSchema): boolean {
-  if (schema.items.length !== 4) return false;
-  return schema.items.every(
-    (item) =>
-      item.type === "number" &&
-      (item as NumberSchema).min !== undefined &&
-      (item as NumberSchema).max !== undefined
-  );
-}
 
 export function SchemaField({ value, schema, onChange }: Props) {
   switch (schema.type) {
@@ -78,6 +69,17 @@ export function SchemaField({ value, schema, onChange }: Props) {
       const tupleSchema = schema as TupleSchema;
       const items = tupleSchema.items;
 
+      // Color tuple (3 or 4 elements, detected via meta)
+      if (tupleSchema.meta?.kind === "color") {
+        return (
+          <ColorField
+            value={value as number[]}
+            schema={tupleSchema}
+            onChange={onChange as (v: number[]) => void}
+          />
+        );
+      }
+
       // 3-element numeric tuple → Vec3Field
       if (
         items.length === 3 &&
@@ -97,11 +99,10 @@ export function SchemaField({ value, schema, onChange }: Props) {
         items.length === 4 &&
         items.every((item) => item.type === "number")
       ) {
-        if (isColorTuple(tupleSchema)) {
+        if (tupleSchema.meta?.kind === "euler") {
           return (
-            <ColorField
+            <EulerField
               value={value as [number, number, number, number]}
-              schema={tupleSchema}
               onChange={
                 onChange as (v: [number, number, number, number]) => void
               }

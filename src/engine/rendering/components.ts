@@ -5,14 +5,15 @@ import { assetRef } from "../asset";
 const finiteNumber = s.number({ finite: true });
 
 /** Quaternion with identity default [0, 0, 0, 1] */
-export const quatIdentitySchema = defineSchema(
-  s.tuple([
+export const quatIdentitySchema = defineSchema({
+  ...s.tuple([
     s.number({ finite: true, default: 0 }),
     s.number({ finite: true, default: 0 }),
     s.number({ finite: true, default: 0 }),
     s.number({ finite: true, default: 1 }),
-  ])
-);
+  ]),
+  meta: { kind: "euler" },
+});
 
 /** Vec3 with default [1, 1, 1] for scale */
 export const scaleVec3Schema = defineSchema(
@@ -24,14 +25,25 @@ export const scaleVec3Schema = defineSchema(
 );
 
 /** RGBA color tuple with default opaque light gray [0.8, 0.8, 0.8, 1.0] */
-export const colorTuple = defineSchema(
-  s.tuple([
+export const colorTuple = defineSchema({
+  ...s.tuple([
     s.number({ finite: true, min: 0, max: 1, default: 0.8 }),
     s.number({ finite: true, min: 0, max: 1, default: 0.8 }),
     s.number({ finite: true, min: 0, max: 1, default: 0.8 }),
     s.number({ finite: true, min: 0, max: 1, default: 1.0 }),
-  ])
-);
+  ]),
+  meta: { kind: "color" },
+});
+
+/** RGB color tuple (no alpha) with default light gray [0.8, 0.8, 0.8] */
+export const colorRgbTuple = defineSchema({
+  ...s.tuple([
+    s.number({ finite: true, min: 0, max: 1, default: 0.8 }),
+    s.number({ finite: true, min: 0, max: 1, default: 0.8 }),
+    s.number({ finite: true, min: 0, max: 1, default: 0.8 }),
+  ]),
+  meta: { kind: "color" },
+});
 
 export const Transform3D = defineSchema(
   s.object({
@@ -99,7 +111,7 @@ export const SpotLight = defineSchema(
 
 export const Background = defineSchema(
   s.object({
-    color: colorTuple,
+    color: colorRgbTuple,
     intensity: s.number({ default: 1, min: 0 }),
     blurriness: s.number({ default: 0, min: 0, max: 1 }),
   })

@@ -96,7 +96,7 @@ export function Inspector() {
           <select
             onChange={handleAddComponent}
             value=""
-            className="w-full bg-surface text-primary text-[11px] px-2 py-1 border border-subtle rounded cursor-pointer"
+            className="w-full bg-surface text-primary text-[11px] px-2 py-1 border border-subtle rounded cursor-pointer outline-none focus:border-focus"
           >
             <option value="" disabled>
               Add Component...

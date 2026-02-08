@@ -110,7 +110,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
 
   const bgEntity = world.createEntity();
   world.setComponent(bgEntity, "Background", {
-    color: [0.53, 0.81, 0.92, 1],
+    color: [0.53, 0.81, 0.92],
     intensity: 1,
     blurriness: 0,
   });

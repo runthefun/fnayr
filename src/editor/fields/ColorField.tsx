@@ -1,61 +1,58 @@
 import type { TupleSchema, NumberSchema } from "../../engine/schema";
 
 type Props = {
-  value: [number, number, number, number];
+  value: number[];
   schema: TupleSchema;
-  onChange: (value: [number, number, number, number]) => void;
+  onChange: (value: number[]) => void;
 };
 
-const LABELS = ["R", "G", "B", "A"];
-
 export function ColorField({ value, schema, onChange }: Props) {
-  // Convert [0-1] RGBA to hex for color swatch
+  const hasAlpha = schema.items.length >= 4;
+
+  // Convert [0-1] RGB to hex for color picker
   const r = Math.round(value[0] * 255);
   const g = Math.round(value[1] * 255);
   const b = Math.round(value[2] * 255);
   const hex = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5">
-        <input
-          type="color"
-          value={hex}
-          onChange={(e) => {
-            const h = e.target.value;
-            const nr = parseInt(h.slice(1, 3), 16) / 255;
-            const ng = parseInt(h.slice(3, 5), 16) / 255;
-            const nb = parseInt(h.slice(5, 7), 16) / 255;
+    <div className="flex items-center gap-1.5">
+      <input
+        type="color"
+        value={hex}
+        onChange={(e) => {
+          const h = e.target.value;
+          const nr = parseInt(h.slice(1, 3), 16) / 255;
+          const ng = parseInt(h.slice(3, 5), 16) / 255;
+          const nb = parseInt(h.slice(5, 7), 16) / 255;
+          if (hasAlpha) {
             onChange([nr, ng, nb, value[3]]);
-          }}
-          className="w-6 h-6 rounded border border-subtle cursor-pointer bg-transparent p-0"
-        />
-        <div className="flex gap-1 flex-1">
-          {LABELS.map((label, i) => {
-            const itemSchema = schema.items[i] as NumberSchema;
-            return (
-              <label key={label} className="flex items-center gap-0.5 flex-1 min-w-0">
-                <span className="text-muted text-[10px] shrink-0">{label}</span>
-                <input
-                  type="number"
-                  value={value[i]}
-                  step={0.01}
-                  min={itemSchema.min ?? 0}
-                  max={itemSchema.max ?? 1}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (isNaN(v)) return;
-                    const next = [...value] as [number, number, number, number];
-                    next[i] = v;
-                    onChange(next);
-                  }}
-                  className="bg-input border border-subtle rounded px-1 py-0.5 w-full text-primary outline-none focus:border-focus min-w-0"
-                />
-              </label>
-            );
-          })}
-        </div>
-      </div>
+          } else {
+            onChange([nr, ng, nb]);
+          }
+        }}
+        className="w-6 h-6 rounded border border-subtle cursor-pointer bg-transparent p-0 shrink-0"
+      />
+      {hasAlpha && (
+        <>
+          <span className="text-muted text-[10px] shrink-0">A</span>
+          <input
+            type="range"
+            value={value[3]}
+            min={(schema.items[3] as NumberSchema).min ?? 0}
+            max={(schema.items[3] as NumberSchema).max ?? 1}
+            step={0.01}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value);
+              if (!isNaN(v)) onChange([value[0], value[1], value[2], v]);
+            }}
+            className="flex-1 min-w-0 accent-blue-500"
+          />
+          <span className="text-muted text-[10px] w-6 text-right shrink-0">
+            {Math.round(value[3] * 100)}%
+          </span>
+        </>
+      )}
     </div>
   );
 }
