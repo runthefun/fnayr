@@ -106,16 +106,16 @@ Worlds running asset systems must be created with `renderingResources`.
 These must hold regardless of implementation strategy.
 
 ### 1. Slot state machine
-A tracked slot has state ∈ {pending, active, failed} and a monotonically increasing generation counter. Valid transitions: `pending → active` (resolve success), `pending → failed` (resolve failure or unsupported type), `active → pending` (URI/sub change; generation advances), `failed → pending` (retryFailed, URI change, or unsupported-type recovery with loader now registered; generation advances). No other transitions occur — in particular `failed → active` and `active → failed` require passing through `pending`. Generation advances on URI change, sub change, and retry; it never decreases. A component update that changes neither URI nor sub causes no transition and no generation advance. A failed slot does not auto-recover on re-execution or unrelated updates.
+A tracked slot has state ∈ {pending, active, failed} and a monotonically increasing generation counter. Valid transitions: `pending → active` (resolve success), `pending → failed` (resolve failure or unsupported type), `active → pending` (URI/sub change; generation advances), `failed → pending` (retryFailed for manager-backed failed slots, URI change, or unsupported-type recovery once a loader is registered; generation advances). No other transitions occur — in particular `failed → active` and `active → failed` require passing through `pending`. Generation advances on URI change, sub change, and any retry that actually transitions `failed → pending`; it never decreases. A component update that changes neither URI nor sub causes no transition and no generation advance. A failed slot does not auto-recover on re-execution or unrelated updates.
 
 ### 2. Ref-slot conservation
-For any cache key k with a live entry, `peek(k).refCount` equals the number of tracked slots bound to k. Every slot contributes exactly one ref at steady state. All transitions preserve this: creation calls `request()` (+1), destruction calls `release()` (−1), URI change calls `release(old)` then `request(new)`, retry calls `invalidate()` + `request()` with no net change. When a slot is removed (component removal or entity destruction), its ref is released by end of frame. No double-release, no leaked refs.
+For any cache key k with a live entry, `peek(k).refCount` equals the number of manager-backed tracked slots bound to k. A slot is manager-backed iff it has a non-empty URI and a loader exists for its `asset.type` when entering `pending`; unsupported-type failed slots are tracked but unbacked and contribute zero manager refs. All transitions preserve this: creation with loader calls `request()` (+1), creation without loader contributes no ref, destruction of a backed slot calls `release()` (−1), URI change calls `release(old)` then `request(new)`, retry of a backed failed slot calls `invalidate()` + `request()` with no net change. When a backed slot is removed (component removal or entity destruction), its ref is released by end of frame. No double-release, no leaked refs.
 
 ### 3. Completion safety
 Each load attempt produces exactly one terminal event (ready or failed). A completion applies only if the slot's (entity, component, generation) still matches — stale completions are discarded and their assets disposed (mechanism behind AssetManager invariant 5). Per slot-generation, at most one instantiation occurs: the synchronous path (`peek` at system entry) and the async path (`drainReady`) are mutually exclusive per generation. Within a frame, generation advance and clearOnPending precede any completion application. If the component has been removed, forward mutations (instantiation) are discarded; only teardown mutations (clear, release) are permitted.
 
 ### 4. Binding protocol
-An entity's ThreeBinding holds at most one scene object. `binding.set(entity, obj)` is the sole write path: it removes and disposes the previous object (geometry, materials) before adding the new one — no frame has both present, no orphan scene-graph nodes accumulate. Per frame, at most one system writes to a given entity's binding, enforced by system ordering and the ModelRenderer guard.
+An entity's ThreeBinding holds at most one scene object. `binding.set(entity, obj)` is the sole write path: it removes and disposes the previous object (geometry, materials) before adding the new one — no frame has both present, no orphan scene-graph nodes accumulate. In steady state, one owner system writes a given entity binding per frame. During explicit ownership handoff (e.g., model owner clears, mesh owner sets), at most two ordered writes may occur in the same frame; end-of-frame state still contains exactly one winning object.
 
 ### 5. LoadingState
 LoadingState is computed once per frame at the end of `assetRequestSystem` from tracked slot counts (not `AssetManager.getStats()`), including slots for unsupported types. `total = pending + ready + failed`, where `ready` counts slots in the `active` state. Downstream slot transitions (by `modelResolveSystem`) are reflected next frame.
@@ -128,6 +128,12 @@ Cache key identity is `(asset.type, asset.uri)` — `sub` and `options` do not a
 
 ### 8. Resilience
 Unsupported asset types are tracked as failed without throwing. If no ECS changes occurred and no loads settled, re-execution is a no-op. A loader failure for one URI does not affect other in-flight loads. Multiple `retryFailed(key)` calls within the same frame produce at most one new request per failed slot.
+
+### 9. Frame coalescing and precedence
+For a given slot within one frame, multiple component writes are coalesced to one effective transition based on the final post-flush component value. Transition precedence is deterministic: removal/destroy teardown > empty-URI teardown > URI/sub-driven pending transition > retry-driven pending transition > completion application. A slot performs at most one `release(oldKey)` and one `request(newKey)` per frame.
+
+### 10. Warning determinism
+Warnings are behavioral signals, not control flow. The same logical issue should be logged at most once per slot-generation or load attempt: divergent options for the same `(type, uri)`, missing loader for a tracked unsupported type, and missing `sub` node fallback.
 
 ---
 
@@ -159,7 +165,7 @@ Factory: `createAssetRequestSystem(assetManager, slots)`
 Updated once at the end of each execution from tracked slot counts (see LoadingState update timing invariant).
 
 ### retryFailed(key)
-Public method. Invalidates the manager's `error` entry for `key`, then re-requests all tracked failed slots for that key, creating one fresh load attempt. Net slot-to-ref conservation is preserved (one slot, one ref).
+Public method. Invalidates the manager's `error` entry for `key`, then re-requests all tracked manager-backed failed slots for that key, creating one fresh load attempt. Unsupported/no-loader failed slots remain failed until a loader is available and the component is touched. Net slot-to-ref conservation is preserved for manager-backed slots (one slot, one ref).
 
 ---
 
@@ -297,6 +303,8 @@ entity has DirectionalLight (light map) + ModelRenderer (ThreeBinding)
 - Remove ModelRenderer → binding cleared, ref released
 - Entity destroyed while loading → no leak, release once
 - Remove + destroy same frame → releases exactly once
+- Multiple writes same frame (same slot) coalesce to one effective transition
+- Same-frame ownership handoff may clear then set; end-of-frame has one bound object
 
 **URI/sub updates:**
 - New URI: old released, new requested, old model cleared immediately
@@ -320,6 +328,7 @@ entity has DirectionalLight (light map) + ModelRenderer (ThreeBinding)
 **Unsupported type:**
 - No loader: slot failed, warning, no throw
 - Counted in LoadingState.failed
+- Unsupported failed slots are tracked with zero manager refs
 - Loader registered later + component touch → recovers to pending
 - Touch without loader: no-op
 
@@ -330,6 +339,12 @@ entity has DirectionalLight (light map) + ModelRenderer (ThreeBinding)
 - Failed load → slot failed
 - Failed slot cleanup: correct release behavior
 - retryFailed: all matching slots transition to pending, correct refcounts
+- Multiple retryFailed(key) in one frame are coalesced per slot
+
+**Warnings:**
+- Divergent options warning emits at most once per load attempt
+- Unsupported-type warning emits at most once per slot-generation
+- Missing sub fallback warning emits at most once per slot-generation
 
 **Guards:**
 - Component-presence gate: no instantiation after component removed
