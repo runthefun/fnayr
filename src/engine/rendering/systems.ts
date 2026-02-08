@@ -347,7 +347,7 @@ export function createAssetRequestSystem(
       existing.sub = ref.sub;
       existing.status = "pending";
       existing.version++;
-      existing.clearOnPending = false;
+      existing.clearOnPending = true;
       return;
     }
 
@@ -461,6 +461,7 @@ export function createAssetRequestSystem(
   }) as System<RenderRegistry> & { retryFailed(key: string): void };
 
   system.retryFailed = (key: string) => {
+    assetManager.invalidate(key);
     for (const [, slot] of slots) {
       if (slot.status === "failed" && slot.key === key) {
         if (assetManager.hasLoader(slot.type)) {

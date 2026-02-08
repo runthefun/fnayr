@@ -37,6 +37,10 @@ export class ThreeBinding<
   }
 
   set(entity: EntityId, obj: THREE.Object3D): void {
+    const prev = this.objectOf.get(entity);
+    if (prev && prev !== obj) {
+      prev.removeFromParent();
+    }
     this.objectOf.set(entity, obj);
   }
 

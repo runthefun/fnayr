@@ -788,4 +788,92 @@ describe("Asset sync", () => {
     // Model should NOT be instantiated (gate fails)
     expect(binding.has(entity)).toBe(false);
   });
+
+  // ---- 23. Retry should invalidate error and trigger a new load ----
+  it("retryFailed invalidates error and triggers a fresh load", async () => {
+    const { world, slots, mock, frame, assetRequest } = setup();
+    const entity = world.createEntity();
+    const loadSpy = vi.spyOn(mock.loader, "load");
+    const sk = `${entity}:ModelRenderer`;
+    const key = AssetManager.cacheKey("glb", "bad.glb");
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "bad.glb" },
+      });
+    });
+
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+
+    mock.reject("bad.glb", new Error("first failure"));
+    await tick();
+    frame();
+
+    expect(slots.get(sk)?.status).toBe("failed");
+
+    assetRequest.retryFailed(key);
+
+    // Expected behavior: invalidate + fresh request should call loader again.
+    expect(loadSpy).toHaveBeenCalledTimes(2);
+  });
+
+  // ---- 24. Key-switch from active model should clear old binding immediately ----
+  it("URI key switch clears active model binding before new asset is ready", async () => {
+    const { world, binding, scene, slots, mock, frame } = setup();
+    const entity = world.createEntity();
+    const sk = `${entity}:ModelRenderer`;
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "a.glb" },
+      });
+    });
+    mock.resolve("a.glb", createMockGltf("modelA"));
+    await tick();
+    frame();
+
+    const firstObj = binding.get(entity)!;
+    expect(slots.get(sk)?.status).toBe("active");
+    expect(binding.has(entity)).toBe(true);
+
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = { kind: "asset", type: "glb", uri: "b.glb" };
+    });
+
+    // Expected behavior: active->pending key switch pre-clears old object.
+    expect(slots.get(sk)?.status).toBe("pending");
+    expect(binding.has(entity)).toBe(false);
+    expect(scene.children.includes(firstObj)).toBe(false);
+  });
+
+  // ---- 25. Mesh->model replacement should not leave stale mesh in scene ----
+  it("mesh to model replacement leaves exactly one scene object for the entity", async () => {
+    const { world, binding, scene, mock, frame } = setup();
+    const entity = world.createEntity();
+
+    frame(() => {
+      world.setComponent(entity, "MeshRenderer" as any, {
+        geometry: "box",
+        color: [1, 0, 0, 1],
+      });
+    });
+    expect(binding.get(entity)).toBeInstanceOf(THREE.Mesh);
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "robot.glb" },
+      });
+    });
+    mock.resolve("robot.glb", createMockGltf("robot"));
+    await tick();
+    frame();
+
+    const objectsForEntity = scene.children.filter(
+      (obj) => obj.userData.entityId === entity
+    );
+
+    expect(objectsForEntity).toHaveLength(1);
+    expect(objectsForEntity[0]).toBeInstanceOf(THREE.Group);
+  });
 });
