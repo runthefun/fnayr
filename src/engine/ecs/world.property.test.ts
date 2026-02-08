@@ -7,10 +7,10 @@ const registry = {
   Transform: s.object({ x: s.number() }),
 };
 
-const SLOT_COUNT = 8;
+const SLOT_COUNT = 16;
 
 type Action =
-  | { kind: "create"; slot: number }
+  | { kind: "create" }
   | { kind: "spawn"; count: number; withTransform: boolean; baseX: number }
   | { kind: "set"; slot: number; useDefault: boolean; x: number }
   | { kind: "remove"; slot: number }
@@ -70,9 +70,10 @@ function recordUpdated(model: Model, entity: number): void {
   model.updated.add(entity);
 }
 
-function applyCreate(model: Model, id: number, slot: number): void {
+function applyCreate(model: Model, id: number): void {
   model.entities.set(id, { alive: true });
-  model.slots[slot] = id;
+  model.slots[model.nextSlot % SLOT_COUNT] = id;
+  model.nextSlot++;
 }
 
 function applySpawn(model: Model, ids: number[], withTransform: boolean, baseX: number): void {
@@ -88,11 +89,11 @@ function applySpawn(model: Model, ids: number[], withTransform: boolean, baseX: 
   }
 }
 
-function applySet(model: Model, slot: number, useDefault: boolean, x: number): boolean {
+function applySet(model: Model, slot: number, useDefault: boolean, x: number): void {
   const id = model.slots[slot];
-  if (id === undefined) return false;
+  if (id === undefined) return;
   const entity = model.entities.get(id);
-  if (!entity || !entity.alive) return false;
+  if (!entity || !entity.alive) return;
 
   const existed = !!entity.transform;
   entity.transform = { x: useDefault ? 0 : x };
@@ -101,7 +102,6 @@ function applySet(model: Model, slot: number, useDefault: boolean, x: number): b
   } else {
     recordAdded(model, id);
   }
-  return false;
 }
 
 function applyRemove(model: Model, slot: number): void {
@@ -195,7 +195,7 @@ const slotArb = fc.integer({ min: 0, max: SLOT_COUNT - 1 });
 const xArb = fc.integer({ min: -20, max: 20 });
 
 const actionArb: fc.Arbitrary<Action> = fc.oneof(
-  fc.record({ kind: fc.constant("create"), slot: slotArb }),
+  fc.record({ kind: fc.constant("create") }),
   fc.record({
     kind: fc.constant("spawn"),
     count: fc.integer({ min: 1, max: 3 }),
@@ -233,7 +233,7 @@ describe("EcsWorld (property-based)", () => {
           switch (action.kind) {
             case "create": {
               const id = world.createEntity();
-              applyCreate(model, id, action.slot);
+              applyCreate(model, id);
               break;
             }
 
@@ -241,27 +241,21 @@ describe("EcsWorld (property-based)", () => {
               const factories = action.withTransform
                 ? { Transform: (i: number) => ({ x: action.baseX + i }) }
                 : undefined;
-              const ids = world.spawn(action.count, factories as any);
+              const ids = world.spawn(action.count, factories);
               applySpawn(model, ids, action.withTransform, action.baseX);
               break;
             }
 
             case "set": {
               const id = model.slots[action.slot];
-              let threw = false;
-              try {
-                if (id !== undefined) {
-                  if (action.useDefault) {
-                    world.setComponent(id, "Transform");
-                  } else {
-                    world.setComponent(id, "Transform", { x: action.x });
-                  }
+              if (id !== undefined) {
+                if (action.useDefault) {
+                  world.setComponent(id, "Transform");
+                } else {
+                  world.setComponent(id, "Transform", { x: action.x });
                 }
-              } catch {
-                threw = true;
               }
-              const expectedThrow = applySet(model, action.slot, action.useDefault, action.x);
-              expect(threw).toBe(expectedThrow);
+              applySet(model, action.slot, action.useDefault, action.x);
               break;
             }
 
@@ -311,7 +305,7 @@ describe("EcsWorld (property-based)", () => {
           assertWorldMatchesModel(world, model);
         }
       }),
-      { numRuns: 200 },
+      { numRuns: 500 },
     );
   }, 60_000);
 });
