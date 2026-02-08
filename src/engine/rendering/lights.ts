@@ -3,13 +3,43 @@ import type { World } from "../ecs/types";
 import type { Commands } from "../ecs/commands";
 import type { System } from "../ecs/systems";
 import type { renderingRegistry } from "./components";
+import type { ThreeBinding } from "./binding";
 import { EDITOR_LAYER } from "./constants";
 
 type LightRegistry = typeof renderingRegistry;
 type EntityId = number;
 
-export function createLightSyncSystem(
+export function createBackgroundSyncSystem(
   scene: THREE.Scene
+): System<LightRegistry> {
+  function applyBackground(data: any): void {
+    scene.background = new THREE.Color(data.color[0], data.color[1], data.color[2]);
+    scene.backgroundIntensity = data.intensity;
+    scene.backgroundBlurriness = data.blurriness;
+  }
+
+  return (world: World<LightRegistry>, _dt: number, _commands: Commands<LightRegistry>) => {
+    for (const entity of world.getAdded("Background" as any)) {
+      const data = world.getComponent(entity, "Background" as any) as any;
+      if (!data) continue;
+      applyBackground(data);
+    }
+    for (const entity of world.getUpdated("Background" as any)) {
+      const data = world.getComponent(entity, "Background" as any) as any;
+      if (!data) continue;
+      applyBackground(data);
+    }
+    for (const _entity of world.getRemoved("Background" as any)) {
+      scene.background = null;
+      scene.backgroundIntensity = 1;
+      scene.backgroundBlurriness = 0;
+    }
+  };
+}
+
+export function createLightSyncSystem(
+  scene: THREE.Scene,
+  binding?: ThreeBinding<LightRegistry>
 ): System<LightRegistry> {
   const directionalLights = new Map<EntityId, THREE.DirectionalLight>();
   const pointLights = new Map<EntityId, THREE.PointLight>();
@@ -61,6 +91,7 @@ export function createLightSyncSystem(
       light.userData.entityId = entity;
       directionalLights.set(entity, light);
       scene.add(light);
+      binding?.set(entity, light);
 
       const helper = new THREE.DirectionalLightHelper(light, 1);
       addHelper(entity, helper);
@@ -70,6 +101,7 @@ export function createLightSyncSystem(
       if (light) {
         light.removeFromParent();
         directionalLights.delete(entity);
+        binding?.delete(entity);
       }
       removeHelper(entity);
     }
@@ -137,6 +169,7 @@ export function createLightSyncSystem(
       light.userData.entityId = entity;
       pointLights.set(entity, light);
       scene.add(light);
+      binding?.set(entity, light);
 
       const helper = new THREE.PointLightHelper(light, 0.5);
       addHelper(entity, helper);
@@ -146,6 +179,7 @@ export function createLightSyncSystem(
       if (light) {
         light.removeFromParent();
         pointLights.delete(entity);
+        binding?.delete(entity);
       }
       removeHelper(entity);
     }
@@ -189,6 +223,7 @@ export function createLightSyncSystem(
       light.userData.entityId = entity;
       spotLights.set(entity, light);
       scene.add(light);
+      binding?.set(entity, light);
 
       if (data.showHelper) {
         const helper = new THREE.SpotLightHelper(light);
@@ -200,6 +235,7 @@ export function createLightSyncSystem(
       if (light) {
         light.removeFromParent();
         spotLights.delete(entity);
+        binding?.delete(entity);
       }
       removeHelper(entity);
     }

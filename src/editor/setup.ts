@@ -6,7 +6,7 @@ import { renderingRegistry, renderingResources } from "../engine/rendering/compo
 import { ThreeBinding } from "../engine/rendering/binding";
 import { createRenderSyncSystem, createTransformSyncSystem, createAssetRequestSystem, createModelResolveSystem } from "../engine/rendering/systems";
 import type { SlotEntry } from "../engine/rendering/systems";
-import { createLightSyncSystem } from "../engine/rendering/lights";
+import { createLightSyncSystem, createBackgroundSyncSystem } from "../engine/rendering/lights";
 import { GltfAssetLoader } from "../engine/rendering/loaders";
 import { AssetManager } from "../engine/assets";
 import { EDITOR_LAYER } from "../engine/rendering/constants";
@@ -54,7 +54,8 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   const renderSync = createRenderSyncSystem(binding);
   const assetRequestSync = createAssetRequestSystem(assetManager, slots, renderingRegistry);
   const modelResolveSync = createModelResolveSystem(assetManager, binding, slots);
-  const lightSync = createLightSyncSystem(binding.scene);
+  const lightSync = createLightSyncSystem(binding.scene, binding);
+  const backgroundSync = createBackgroundSyncSystem(binding.scene);
   const transformSync = createTransformSyncSystem(binding, {
     shouldSkipTransform: (entity) =>
       gizmo.dragging && entity === gizmo.attachedEntity,
@@ -107,11 +108,19 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     intensity: 1.5,
   });
 
+  const bgEntity = world.createEntity();
+  world.setComponent(bgEntity, "Background", {
+    color: [0.53, 0.81, 0.92, 1],
+    intensity: 1,
+    blurriness: 0,
+  });
+
   // Run sync systems to build initial scene graph
   renderSync(world, 0, commands);
   assetRequestSync(world as any, 0, commands as any);
   modelResolveSync(world as any, 0, commands as any);
   lightSync(world, 0, commands);
+  backgroundSync(world, 0, commands);
   transformSync(world, 0, commands);
   commands.flush();
   world.endFrame();
@@ -130,6 +139,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     assetRequestSync(world as any, 0, commands as any);
     modelResolveSync(world as any, 0, commands as any);
     lightSync(world, 0, commands);
+    backgroundSync(world, 0, commands);
     transformSync(world, 0, commands);
     commands.flush();
     gizmo.tick();
