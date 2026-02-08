@@ -159,5 +159,8 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     renderer.dispose();
   }
 
+  // Expose for devtools inspection
+  (window as any).__editor = { world, binding, hierarchy, store, gizmo, controls, renderer, camera, assetManager, slots };
+
   return { world, binding, hierarchy, store, gizmo, controls, renderer, camera, dispose };
 }

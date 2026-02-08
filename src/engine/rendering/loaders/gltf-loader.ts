@@ -1,4 +1,5 @@
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import type { AssetLoader } from "../../assets/types";
 
@@ -6,9 +7,13 @@ export type GltfAsset = { gltf: GLTF };
 
 export class GltfAssetLoader implements AssetLoader<GltfAsset> {
   private readonly loader: GLTFLoader;
+  private readonly dracoLoader: DRACOLoader;
 
   constructor(loader?: GLTFLoader) {
+    this.dracoLoader = new DRACOLoader();
+    this.dracoLoader.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
     this.loader = loader ?? new GLTFLoader();
+    this.loader.setDRACOLoader(this.dracoLoader);
   }
 
   load(uri: string): Promise<GltfAsset> {
