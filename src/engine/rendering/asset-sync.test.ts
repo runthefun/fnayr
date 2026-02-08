@@ -33,6 +33,39 @@ function createMockGltf(name = "root", childNames: string[] = []) {
   return { gltf: { scene } };
 }
 
+function createMockSkinnedGltf() {
+  const scene = new THREE.Group();
+  scene.name = "skinned-root";
+
+  const rootBone = new THREE.Bone();
+  rootBone.name = "rootBone";
+  const childBone = new THREE.Bone();
+  childBone.name = "childBone";
+  rootBone.add(childBone);
+
+  const geometry = new THREE.BoxGeometry();
+  const material = new THREE.MeshBasicMaterial();
+  const skinnedMesh = new THREE.SkinnedMesh(geometry, material);
+  skinnedMesh.name = "skinnedMesh";
+  skinnedMesh.add(rootBone);
+  skinnedMesh.bind(new THREE.Skeleton([rootBone, childBone]));
+
+  scene.add(skinnedMesh);
+  return { gltf: { scene } };
+}
+
+function getFirstSkinnedMesh(
+  obj: THREE.Object3D
+): THREE.SkinnedMesh | undefined {
+  let result: THREE.SkinnedMesh | undefined;
+  obj.traverse((node) => {
+    if (!result && node instanceof THREE.SkinnedMesh) {
+      result = node;
+    }
+  });
+  return result;
+}
+
 function createMockLoader() {
   const pending = new Map<
     string,
@@ -875,5 +908,104 @@ describe("Asset sync", () => {
 
     expect(objectsForEntity).toHaveLength(1);
     expect(objectsForEntity[0]).toBeInstanceOf(THREE.Group);
+  });
+
+  // ---- 26. Failed slot should not become pending on sub-only updates ----
+  it("failed slot remains failed when only sub changes", async () => {
+    const { world, slots, mock, frame } = setup();
+    const entity = world.createEntity();
+    const sk = `${entity}:ModelRenderer`;
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "bad.glb" },
+      });
+    });
+
+    mock.reject("bad.glb", new Error("load failed"));
+    await tick();
+    frame();
+
+    expect(slots.get(sk)?.status).toBe("failed");
+
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = {
+        kind: "asset",
+        type: "glb",
+        uri: "bad.glb",
+        sub: "arm",
+      };
+    });
+
+    expect(slots.get(sk)?.status).toBe("failed");
+  });
+
+  // ---- 27. retryFailed should handle unsupported-type failed slots ----
+  it("retryFailed re-requests unsupported-type slot after loader registration", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { world, slots, assetManager, assetRequest, frame } = setup();
+    const entity = world.createEntity();
+    const sk = `${entity}:ModelRenderer`;
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
+      });
+    });
+
+    expect(slots.get(sk)?.status).toBe("failed");
+    expect(slots.get(sk)?.key).toBe("");
+
+    const textureLoad = vi.fn(() => Promise.resolve({ tex: "ok" }));
+    assetManager.registerLoader("texture", {
+      load: textureLoad,
+      dispose: vi.fn(),
+    });
+
+    assetRequest.retryFailed(AssetManager.cacheKey("texture", "diffuse.png"));
+
+    expect(textureLoad).toHaveBeenCalledTimes(1);
+    expect(slots.get(sk)?.status).toBe("pending");
+    expect(slots.get(sk)?.key).toBe(
+      AssetManager.cacheKey("texture", "diffuse.png")
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  // ---- 28. Skinned models should have independent skeleton clones ----
+  it("same cached skinned model creates independent skeletons per entity", async () => {
+    const { world, binding, mock, frame } = setup();
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+
+    frame(() => {
+      world.setComponent(e1, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "rig.glb" },
+      });
+      world.setComponent(e2, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "rig.glb" },
+      });
+    });
+
+    mock.resolve("rig.glb", createMockSkinnedGltf());
+    await tick();
+    frame();
+
+    const obj1 = binding.get(e1)!;
+    const obj2 = binding.get(e2)!;
+    const skinned1 = getFirstSkinnedMesh(obj1);
+    const skinned2 = getFirstSkinnedMesh(obj2);
+    expect(skinned1).toBeDefined();
+    expect(skinned2).toBeDefined();
+
+    expect(skinned1!.skeleton.bones[0]).not.toBe(skinned2!.skeleton.bones[0]);
+    expect(
+      obj1.getObjectByProperty("uuid", skinned1!.skeleton.bones[0].uuid)
+    ).toBeDefined();
+    expect(
+      obj2.getObjectByProperty("uuid", skinned2!.skeleton.bones[0].uuid)
+    ).toBeDefined();
   });
 });

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { clone as skeletonClone } from "three/addons/utils/SkeletonUtils.js";
 import type { ComponentRegistry, World } from "../ecs/types";
 import type { Commands } from "../ecs/commands";
 import type { System } from "../ecs/systems";
@@ -354,9 +355,11 @@ export function createAssetRequestSystem(
     // Branch B: same key, sub changed
     if (ref.sub !== existing.sub) {
       existing.sub = ref.sub;
-      existing.status = "pending";
-      existing.version++;
-      existing.clearOnPending = true;
+      if (existing.status === "active") {
+        existing.status = "pending";
+        existing.version++;
+        existing.clearOnPending = true;
+      }
       return;
     }
 
@@ -463,14 +466,16 @@ export function createAssetRequestSystem(
   system.retryFailed = (key: string) => {
     assetManager.invalidate(key);
     for (const [, slot] of slots) {
-      if (slot.status === "failed" && slot.key === key) {
-        if (assetManager.hasLoader(slot.type)) {
-          const ck = AssetManager.cacheKey(slot.type, slot.uri);
-          assetManager.request(slot.type, slot.uri, slot.options);
-          slot.key = ck;
-          slot.status = "pending";
-          slot.version++;
-        }
+      if (slot.status !== "failed") continue;
+      const matches =
+        slot.key === key ||
+        (slot.key === "" && AssetManager.cacheKey(slot.type, slot.uri) === key);
+      if (matches && assetManager.hasLoader(slot.type)) {
+        const ck = AssetManager.cacheKey(slot.type, slot.uri);
+        assetManager.request(slot.type, slot.uri, slot.options);
+        slot.key = ck;
+        slot.status = "pending";
+        slot.version++;
       }
     }
   };
@@ -489,7 +494,7 @@ function instantiateGltf(
   world: World<any>,
   binding: ThreeBinding<any>,
 ): void {
-  const clone = gltfAsset.gltf.scene.clone(true);
+  const clone = skeletonClone(gltfAsset.gltf.scene);
 
   if (sub) {
     const subNode = clone.getObjectByName(sub);
