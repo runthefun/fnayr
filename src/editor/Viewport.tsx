@@ -20,6 +20,7 @@ export function Viewport({ session }: Props) {
     session.renderer.setSize(w, h, false);
     session.camera.aspect = w / h;
     session.camera.updateProjectionMatrix();
+    session.renderer.render(session.binding.scene, session.camera);
   }, [session]);
 
   useEffect(() => {
