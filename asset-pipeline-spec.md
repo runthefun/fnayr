@@ -106,10 +106,10 @@ Worlds running asset systems must be created with `renderingResources`.
 These must hold regardless of implementation strategy.
 
 ### 1. Slot state machine
-A tracked slot has state ∈ {pending, active, failed} and a monotonically increasing generation counter. Valid transitions: `pending → active` (resolve success), `pending → failed` (resolve failure or unsupported type), `active → pending` (URI/sub change; generation advances), `failed → pending` (retryFailed for manager-backed failed slots, URI change, or unsupported-type recovery once a loader is registered; generation advances). No other transitions occur — in particular `failed → active` and `active → failed` require passing through `pending`. Generation advances on URI change, sub change, and any retry that actually transitions `failed → pending`; it never decreases. A component update that changes neither URI nor sub causes no transition and no generation advance. A failed slot does not auto-recover on re-execution or unrelated updates.
+A tracked slot has state ∈ {pending, active, failed} and a monotonically increasing generation counter. Valid transitions: `pending → active` (resolve success), `pending → failed` (resolve failure or unsupported type), `active → pending` (URI/sub change; generation advances), `failed → pending` (retryFailed for manager-backed failed slots, URI change, or unsupported-type recovery once a loader is registered; generation advances). No other transitions occur — in particular `failed → active` and `active → failed` require passing through `pending`. Generation advances on URI change, sub change, and any retry that actually transitions `failed → pending`; it never decreases. For non-failed slots, a component update that changes neither URI nor sub causes no transition and no generation advance. A failed slot does not auto-recover on system re-execution alone; recovery requires an explicit trigger (retryFailed, URI change, or — for unsupported-type failed slots only — any component write once a loader is registered).
 
 ### 2. Ref-slot conservation
-For any cache key k with a live entry, `peek(k).refCount` equals the number of manager-backed tracked slots bound to k. A slot is manager-backed iff it has a non-empty URI and a loader exists for its `asset.type` when entering `pending`; unsupported-type failed slots are tracked but unbacked and contribute zero manager refs. All transitions preserve this: creation with loader calls `request()` (+1), creation without loader contributes no ref, destruction of a backed slot calls `release()` (−1), URI change calls `release(old)` then `request(new)`, retry of a backed failed slot calls `invalidate()` + `request()` with no net change. When a backed slot is removed (component removal or entity destruction), its ref is released by end of frame. No double-release, no leaked refs.
+For any cache key k with a live entry, `peek(k).refCount` equals the number of manager-backed tracked slots bound to k. A slot is manager-backed iff it has a non-empty URI and a loader exists for its `asset.type` when entering `pending`; unsupported-type failed slots are tracked but unbacked and contribute zero manager refs. All transitions preserve this: creation with loader calls `request()` (+1), creation without loader contributes no ref, destruction of a backed slot calls `release()` (−1), URI change calls `release(old)` then `request(new)`, `retryFailed(key)` calls `invalidate(key)` once then `request()` per backed failed slot — net conservation preserved (one slot, one ref). When a backed slot is removed (component removal or entity destruction), its ref is released by end of frame. No double-release, no leaked refs.
 
 ### 3. Completion safety
 Each load attempt produces exactly one terminal event (ready or failed). A completion applies only if the slot's (entity, component, generation) still matches — stale completions are discarded and their assets disposed (mechanism behind AssetManager invariant 5). Per slot-generation, at most one instantiation occurs: the synchronous path (`peek` at system entry) and the async path (`drainReady`) are mutually exclusive per generation. Within a frame, generation advance and clearOnPending precede any completion application. If the component has been removed, forward mutations (instantiation) are discarded; only teardown mutations (clear, release) are permitted.
@@ -236,14 +236,23 @@ Frame N:   ModelRenderer added (asset already cached)
            → resolve sees cache hit → instantiates same frame → active
 ```
 
-### URI change
+### URI change (while active)
 ```
 Frame N:   active, uri=A
 Frame N+1: update to uri=B
            → old ref released, new requested, old model cleared immediately
   ...      B loads
 Frame N+K: resolve instantiates B
-           (if A completes late, it is ignored — slot tracks B now)
+```
+
+### URI change (while loading)
+```
+Frame N:   pending, uri=A (load in-flight)
+Frame N+1: update to uri=B
+           → old ref released (A's in-flight load orphaned), new requested
+  ...      A settles → disposed by manager (no orphan leak, invariant 4)
+  ...      B loads
+Frame N+K: resolve instantiates B (A's completion ignored — slot tracks B)
 ```
 
 ### Sub switch (same URI)
