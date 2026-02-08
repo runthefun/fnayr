@@ -121,7 +121,7 @@ No system removes another system's component. `modelResolveSystem` never removes
 No forward mutation (instantiation, overwrite) of an entity's binding after the relevant component has been removed (e.g., `ModelRenderer` removed but async load completes — completion is discarded). Teardown mutations (clearing binding, releasing refs) as part of removal handling are required, not prohibited.
 
 ### LoadingState accuracy
-`LoadingState` reflects the actual count of all tracked asset slots, including slots for unsupported types. It is not derived from `AssetManager.getStats()`.
+`LoadingState` reflects the actual count of all tracked asset slots as of the most recent `assetRequestSystem` execution, including slots for unsupported types. It is not derived from `AssetManager.getStats()`. Slot transitions by downstream systems (e.g., `modelResolveSystem` moving slots from pending to active) are reflected in the next frame's update.
 
 ### LoadingState arithmetic
 For every frame: `total = pending + ready + failed`. `ready` is the count of slots in the internal `active` slot state.
@@ -175,13 +175,34 @@ A slot's generation counter is monotonically increasing. It advances on URI chan
 When a slot's URI changes from A to B, `release(keyA)` is called before `request(keyB)`. This guarantees that if A and B resolve to the same cache key, the refCount is decremented before being re-incremented, preventing double-counting.
 
 ### Failed slot stability
-A failed slot remains in the `failed` state indefinitely. It does not auto-retry on subsequent frames, on unrelated component updates, or on system re-execution. Recovery requires either an explicit `retryFailed(key)` call or a component update that changes the URI.
+A failed slot remains in the `failed` state indefinitely. It does not auto-retry on subsequent frames, on unrelated component updates, or on system re-execution. Recovery requires one of: (1) an explicit `retryFailed(key)` call, (2) a component update that changes the URI, or (3) for slots that failed due to an unsupported type, a component update when a loader for that type is now registered.
 
 ### Single-writer per binding per frame
 For any entity, at most one system writes to its ThreeBinding in a given frame. System ordering and the ModelRenderer guard in renderSyncSystem guarantee that modelResolveSystem and renderSyncSystem never both write to the same entity's binding.
 
 ### LoadingState update timing
 `LoadingState` is updated exactly once per frame, at the end of `assetRequestSystem` execution, after all adds/removes/updates have been processed. Downstream systems and consumers see a consistent snapshot for the remainder of the frame.
+
+### Slot state transitions
+The valid slot state transitions are: `pending → active` (resolve success), `pending → failed` (resolve failure or unsupported type), `active → pending` (URI/sub change, new generation), `failed → pending` (retry, URI change, or unsupported-type recovery). No other transitions occur. In particular, `failed → active` and `active → failed` never happen directly — both require passing through `pending`.
+
+### System re-execution idempotence
+If no components have been added, removed, or updated, and no async completions have settled since the last frame, running the system pipeline produces no side effects (no requests, no ref changes, no binding mutations, no warnings).
+
+### No double-instantiation per generation
+For a given slot at a given generation, at most one clone is instantiated. Neither the synchronous path (`peek`) nor the async path (`drainReady`) can produce a second clone for the same generation.
+
+### Loader failure isolation
+A loader's `load()` failure for one URI does not affect, cancel, or delay in-flight loads for other URIs using the same loader instance.
+
+### Same-URI-same-sub update is a no-op
+A component update where both `uri` and `sub` are unchanged produces no ref changes, no generation advance, no binding mutation, and no new request — regardless of changes to other fields like `options`.
+
+### Dispose-before-bind ordering
+When `binding.set(entity, newObject)` replaces an existing object, the old object is removed from the scene graph and disposed before the new object is added. There is no frame in which both objects exist in the scene simultaneously.
+
+### Schema discovery is static
+The set of components with AssetRef fields is determined at `createAssetRequestSystem()` time and does not change for the lifetime of the system. Dynamic schema changes after system creation are not supported.
 
 ---
 
@@ -230,7 +251,7 @@ Factory: `createModelResolveSystem(assetManager, binding, slots)`
 | Asset load fails | Slot marked failed, warning logged |
 | ModelRenderer removed | Binding cleared |
 | URI updated to empty | Binding cleared |
-| URI/sub changed (clearOnPending) | Old binding cleared immediately (same frame), before new instantiation |
+| Slot generation advanced (URI or sub change) | Detected by comparing slot generation against last-seen generation. Old binding cleared immediately (same frame, clearOnPending), then new clone instantiated from cached asset if available. |
 
 ### Instantiation
 
