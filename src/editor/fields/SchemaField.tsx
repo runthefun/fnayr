@@ -4,6 +4,7 @@ import type {
   NumberSchema,
   ObjectSchema,
   EnumSchema,
+  TaggedUnionSchema,
 } from "../../engine/schema";
 import { NumberField } from "./NumberField";
 import { StringField } from "./StringField";
@@ -14,6 +15,7 @@ import { Vec4Field } from "./Vec4Field";
 import { ColorField } from "./ColorField";
 import { ObjectField } from "./ObjectField";
 import { TagField } from "./TagField";
+import { TaggedUnionField } from "./TaggedUnionField";
 
 type Props = {
   value: unknown;
@@ -144,6 +146,15 @@ export function SchemaField({ value, schema, onChange }: Props) {
         <ObjectField
           value={value as Record<string, unknown>}
           schema={schema as ObjectSchema}
+          onChange={onChange as (v: Record<string, unknown>) => void}
+        />
+      );
+
+    case "taggedUnion":
+      return (
+        <TaggedUnionField
+          value={value as Record<string, unknown>}
+          schema={schema as TaggedUnionSchema}
           onChange={onChange as (v: Record<string, unknown>) => void}
         />
       );

@@ -1,6 +1,6 @@
 import { s, defineSchema } from "../schema";
 import { vec3Schema } from "../math";
-import { assetRefSchema } from "../asset";
+import { assetRef } from "../asset";
 
 const finiteNumber = s.number({ finite: true });
 
@@ -50,7 +50,7 @@ export const VisualRenderer = defineSchema(
     }),
     model: s.object({
       kind: s.literal("model"),
-      asset: assetRefSchema,
+      asset: assetRef("glb"),
     }),
   })
 );

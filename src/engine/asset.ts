@@ -25,18 +25,23 @@ export const assetTypeValues = [
 export type AssetType = (typeof assetTypeValues)[number];
 export type AssetOptions = Record<string, JsonValue>;
 
-export const assetRefSchema = defineSchema(
-  {
+export function assetRef<const T extends readonly AssetType[]>(...types: T) {
+  const typeSchema =
+    types.length === 1 ? s.literal(types[0]) : s.enum(types);
+  return defineSchema({
     ...s.object({
       kind: s.literal("asset"),
-      type: s.enum(assetTypeValues),
+      type: typeSchema,
       uri: s.string(),
       sub: s.optional(s.string()),
       options: s.optional(s.object({}, { allowUnknown: true })),
     }),
     meta: { kind: "assetRef" },
-  }
-);
+  });
+}
+
+/** Generic asset ref that accepts any asset type. */
+export const assetRefSchema = assetRef(...assetTypeValues);
 
 export type AssetRef = InferSchema<typeof assetRefSchema> & {
   options?: AssetOptions;

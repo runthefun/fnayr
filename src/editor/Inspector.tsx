@@ -2,7 +2,7 @@ import { type ChangeEvent } from "react";
 import { useEditor, useSelectedEntity } from "./useEditor";
 import { SchemaField } from "./fields/SchemaField";
 import { getDefault } from "../engine/schema";
-import type { SchemaLike } from "../engine/schema";
+import type { SchemaLike, TaggedUnionSchema } from "../engine/schema";
 import type { renderingRegistry } from "../engine/rendering/components";
 
 type ComponentKey = keyof typeof renderingRegistry;
@@ -36,11 +36,22 @@ export function Inspector() {
   );
 
   function handleAddComponent(e: ChangeEvent<HTMLSelectElement>) {
-    const type = e.target.value as ComponentKey;
-    if (!type) return;
-    const schema = world.registry[type] as SchemaLike;
-    const defaultValue = getDefault(schema);
-    world.setComponent(selectedEntity!, type, defaultValue as never);
+    const raw = e.target.value;
+    if (!raw) return;
+
+    // Format: "ComponentKey" or "ComponentKey::variantName"
+    const sepIdx = raw.indexOf("::");
+    if (sepIdx === -1) {
+      const type = raw as ComponentKey;
+      const schema = world.registry[type] as SchemaLike;
+      world.setComponent(selectedEntity!, type, getDefault(schema) as never);
+    } else {
+      const type = raw.slice(0, sepIdx) as ComponentKey;
+      const variant = raw.slice(sepIdx + 2);
+      const schema = world.registry[type] as TaggedUnionSchema;
+      const variantSchema = schema.variants[variant];
+      world.setComponent(selectedEntity!, type, getDefault(variantSchema) as never);
+    }
   }
 
   function handleRemoveComponent(type: ComponentKey) {
@@ -90,11 +101,26 @@ export function Inspector() {
             <option value="" disabled>
               Add Component...
             </option>
-            {availableComponents.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
+            {availableComponents.map((type) => {
+              const schema = world.registry[type] as SchemaLike;
+              if (schema.type === "taggedUnion") {
+                const tu = schema as TaggedUnionSchema;
+                return (
+                  <optgroup key={type} label={type}>
+                    {Object.keys(tu.variants).map((variant) => (
+                      <option key={variant} value={`${type}::${variant}`}>
+                        {variant}
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              }
+              return (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              );
+            })}
           </select>
         </div>
       )}
