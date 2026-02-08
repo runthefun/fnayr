@@ -1,10 +1,23 @@
 import type { AssetEntry, AssetLoader } from "./types";
 
+function canonicalStringify(value: unknown): string {
+  if (value === null || value === undefined) return JSON.stringify(null);
+  if (typeof value !== "object" || Array.isArray(value)) return JSON.stringify(value);
+  const sorted = Object.keys(value as Record<string, unknown>).sort();
+  const entries: string[] = [];
+  for (const k of sorted) {
+    entries.push(`${JSON.stringify(k)}:${canonicalStringify((value as Record<string, unknown>)[k])}`);
+  }
+  return `{${entries.join(",")}}`;
+}
+
 export class AssetManager {
   private loaders = new Map<string, AssetLoader<unknown>>();
   private cache = new Map<string, AssetEntry>();
   private _justReady = new Set<string>();
   private _justFailed = new Set<string>();
+  private _firstOptions = new Map<string, string>();
+  private _warnedDivergent = new Set<string>();
 
   static cacheKey(type: string, uri: string): string {
     return `${type}::${uri}`;
@@ -32,6 +45,18 @@ export class AssetManager {
     const existing = this.cache.get(key);
 
     if (existing) {
+      if (
+        !this._warnedDivergent.has(key) &&
+        this._firstOptions.has(key)
+      ) {
+        const currentStr = canonicalStringify(options ?? null);
+        if (this._firstOptions.get(key) !== currentStr) {
+          console.warn(
+            `Divergent options for asset "${key}": subsequent request uses different options than the original.`,
+          );
+          this._warnedDivergent.add(key);
+        }
+      }
       existing.refCount++;
       return existing;
     }
@@ -43,6 +68,7 @@ export class AssetManager {
       refCount: 1,
     };
     this.cache.set(key, entry);
+    this._firstOptions.set(key, canonicalStringify(options ?? null));
 
     // Capture entry reference for stale-settle safety
     const capturedEntry = entry;
@@ -89,6 +115,10 @@ export class AssetManager {
         }
       }
       this.cache.delete(key);
+      this._firstOptions.delete(key);
+      this._warnedDivergent.delete(key);
+      this._justFailed.delete(key);
+      this._justReady.delete(key);
     }
   }
 
@@ -113,6 +143,8 @@ export class AssetManager {
     if (!entry || entry.status !== "error") return;
     this.cache.delete(key);
     this._justFailed.delete(key);
+    this._firstOptions.delete(key);
+    this._warnedDivergent.delete(key);
   }
 
   getStats(): { total: number; loading: number; ready: number; error: number } {
@@ -148,5 +180,7 @@ export class AssetManager {
     this.cache.clear();
     this._justReady.clear();
     this._justFailed.clear();
+    this._firstOptions.clear();
+    this._warnedDivergent.clear();
   }
 }

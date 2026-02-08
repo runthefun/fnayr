@@ -1072,4 +1072,463 @@ describe("Asset sync", () => {
 
     expect(slots.get(`${e2}:ModelRenderer`)?.status).toBe("failed");
   });
+
+  // ---- 31. Two entities same URI: one load, two independent clones ----
+  it("two entities same URI: one load, two independent clones", async () => {
+    const { world, binding, mock, frame } = setup();
+    const loadSpy = vi.spyOn(mock.loader, "load");
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+
+    frame(() => {
+      world.setComponent(e1, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "robot.glb" },
+      });
+      world.setComponent(e2, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "robot.glb" },
+      });
+    });
+
+    // Dedup: loader.load called only once
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+
+    mock.resolve("robot.glb", createMockGltf("robot", ["arm", "head"]));
+    await tick();
+    frame();
+
+    // Two independent clones
+    const obj1 = binding.get(e1)!;
+    const obj2 = binding.get(e2)!;
+    expect(obj1).toBeDefined();
+    expect(obj2).toBeDefined();
+    expect(obj1).not.toBe(obj2);
+  });
+
+  // ---- 32. Remove + destroy same frame → releases exactly once ----
+  it("remove + destroy same frame releases exactly once", async () => {
+    const { world, slots, mock, frame, assetManager } = setup();
+    const entity = world.createEntity();
+    const key = AssetManager.cacheKey("glb", "robot.glb");
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "robot.glb" },
+      });
+    });
+    mock.resolve("robot.glb", createMockGltf("robot"));
+    await tick();
+    frame(); // active
+
+    expect(assetManager.peek(key)?.refCount).toBe(1);
+
+    // Remove component and destroy entity in same frame
+    frame(() => {
+      world.removeComponent(entity, "ModelRenderer" as any);
+      world.destroyEntity(entity);
+    });
+
+    // No double-release: entry cleaned up once
+    expect(assetManager.peek(key)).toBeUndefined();
+    expect(slots.has(`${entity}:ModelRenderer`)).toBe(false);
+  });
+
+  // ---- 33. Multiple writes same frame coalesce to one effective transition ----
+  it("multiple writes same frame coalesce to one effective transition", async () => {
+    const { world, slots, mock, frame } = setup();
+    const entity = world.createEntity();
+    const loadSpy = vi.spyOn(mock.loader, "load");
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "a.glb" },
+      });
+    });
+    mock.resolve("a.glb", createMockGltf("modelA"));
+    await tick();
+    frame(); // active with a.glb
+
+    loadSpy.mockClear();
+
+    // Two writes in one frame: uri a→b→c
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = { kind: "asset", type: "glb", uri: "b.glb" };
+      const mr2 = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr2.asset = { kind: "asset", type: "glb", uri: "c.glb" };
+    });
+
+    const sk = `${entity}:ModelRenderer`;
+    // System sees only the final value (c.glb), not intermediate (b.glb)
+    expect(slots.get(sk)?.uri).toBe("c.glb");
+    expect(slots.get(sk)?.status).toBe("pending");
+    // Only c.glb was requested, not b.glb
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+    expect(loadSpy).toHaveBeenCalledWith("c.glb", undefined);
+  });
+
+  // ---- 34. Deep nesting: intermediate siblings hidden ----
+  it("deep nesting sub selection hides intermediate siblings", async () => {
+    const { world, binding, mock, frame } = setup();
+    const entity = world.createEntity();
+
+    // Build nested hierarchy: root > body > [arm > hand, leg], head
+    const root = new THREE.Group();
+    root.name = "root";
+    const body = new THREE.Group();
+    body.name = "body";
+    root.add(body);
+    const arm = new THREE.Group();
+    arm.name = "arm";
+    body.add(arm);
+    const hand = new THREE.Mesh(
+      new THREE.BoxGeometry(),
+      new THREE.MeshBasicMaterial()
+    );
+    hand.name = "hand";
+    arm.add(hand);
+    const leg = new THREE.Mesh(
+      new THREE.BoxGeometry(),
+      new THREE.MeshBasicMaterial()
+    );
+    leg.name = "leg";
+    body.add(leg);
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(),
+      new THREE.MeshBasicMaterial()
+    );
+    head.name = "head";
+    root.add(head);
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "char.glb", sub: "arm" },
+      });
+    });
+    mock.resolve("char.glb", { gltf: { scene: root } });
+    await tick();
+    frame();
+
+    const obj = binding.get(entity)!;
+    // Target and descendants visible
+    expect(obj.getObjectByName("arm")!.visible).toBe(true);
+    expect(obj.getObjectByName("hand")!.visible).toBe(true);
+    // Ancestors visible
+    expect(obj.getObjectByName("body")!.visible).toBe(true);
+    expect(obj.visible).toBe(true);
+    // Siblings hidden
+    expect(obj.getObjectByName("leg")!.visible).toBe(false);
+    expect(obj.getObjectByName("head")!.visible).toBe(false);
+  });
+
+  // ---- 35. Unsupported failed slots tracked with zero manager refs ----
+  it("unsupported failed slots are tracked with zero manager refs", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { world, slots, assetManager, frame } = setup();
+    const entity = world.createEntity();
+    const key = AssetManager.cacheKey("texture", "diffuse.png");
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
+      });
+    });
+
+    const sk = `${entity}:ModelRenderer`;
+    expect(slots.get(sk)?.status).toBe("failed");
+    expect(slots.get(sk)?.key).toBe("");
+    // No entry in asset manager (no loader, so no request was made)
+    expect(assetManager.peek(key)).toBeUndefined();
+
+    warnSpy.mockRestore();
+  });
+
+  // ---- 36. Loader registered later + component touch → recovers to pending ----
+  it("unsupported-type slot recovers to pending on component touch after loader registered", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { world, slots, assetManager, frame } = setup();
+    const entity = world.createEntity();
+    const sk = `${entity}:ModelRenderer`;
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
+      });
+    });
+    expect(slots.get(sk)?.status).toBe("failed");
+
+    // Register loader
+    assetManager.registerLoader("texture", {
+      load: vi.fn(() => Promise.resolve({ tex: "ok" })),
+      dispose: vi.fn(),
+    });
+
+    // Loader registration alone does not trigger recovery
+    frame();
+    expect(slots.get(sk)?.status).toBe("failed");
+
+    // Touch the component (triggers update event)
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = { kind: "asset", type: "texture", uri: "diffuse.png" };
+    });
+
+    expect(slots.get(sk)?.status).toBe("pending");
+
+    warnSpy.mockRestore();
+  });
+
+  // ---- 37. Touch without loader: no-op for unsupported type ----
+  it("touch unsupported-type slot without loader is a no-op", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { world, slots, frame } = setup();
+    const entity = world.createEntity();
+    const sk = `${entity}:ModelRenderer`;
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
+      });
+    });
+    expect(slots.get(sk)?.status).toBe("failed");
+
+    // Touch without registering loader → no recovery
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = { kind: "asset", type: "texture", uri: "diffuse.png" };
+    });
+
+    expect(slots.get(sk)?.status).toBe("failed");
+
+    warnSpy.mockRestore();
+  });
+
+  // ---- 37b. Unsupported slot URI change still updates tracked slot metadata ----
+  it("unsupported-type URI change updates slot uri and version even without loader", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { world, slots, frame } = setup();
+    const entity = world.createEntity();
+    const sk = `${entity}:ModelRenderer`;
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "texture", uri: "a.png" },
+      });
+    });
+
+    const first = slots.get(sk);
+    expect(first?.status).toBe("failed");
+    expect(first?.uri).toBe("a.png");
+    expect(first?.version).toBe(0);
+
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = { kind: "asset", type: "texture", uri: "b.png" };
+    });
+
+    const second = slots.get(sk);
+    expect(second?.status).toBe("failed");
+    expect(second?.uri).toBe("b.png");
+    expect(second?.version).toBe(1);
+
+    warnSpy.mockRestore();
+  });
+
+  // ---- 38. Multiple retryFailed(key) coalesced per slot ----
+  it("multiple retryFailed(key) in one frame are coalesced per slot", async () => {
+    const { world, slots, mock, frame, assetRequest } = setup();
+    const entity = world.createEntity();
+    const loadSpy = vi.spyOn(mock.loader, "load");
+    const key = AssetManager.cacheKey("glb", "bad.glb");
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "bad.glb" },
+      });
+    });
+    mock.reject("bad.glb", new Error("fail"));
+    await tick();
+    frame();
+
+    expect(slots.get(`${entity}:ModelRenderer`)?.status).toBe("failed");
+    loadSpy.mockClear();
+
+    // Call retryFailed twice — should produce at most one new request
+    assetRequest.retryFailed(key);
+    assetRequest.retryFailed(key);
+
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // ---- 39. Divergent options warning at integration level ----
+  it("divergent options warning emits at most once per load attempt", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { world, frame } = setup();
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+    const e3 = world.createEntity();
+
+    frame(() => {
+      world.setComponent(e1, "ModelRenderer" as any, {
+        asset: {
+          kind: "asset",
+          type: "glb",
+          uri: "robot.glb",
+          options: { quality: "high" },
+        },
+      });
+      world.setComponent(e2, "ModelRenderer" as any, {
+        asset: {
+          kind: "asset",
+          type: "glb",
+          uri: "robot.glb",
+          options: { quality: "low" },
+        },
+      });
+      world.setComponent(e3, "ModelRenderer" as any, {
+        asset: {
+          kind: "asset",
+          type: "glb",
+          uri: "robot.glb",
+          options: { quality: "medium" },
+        },
+      });
+    });
+
+    const divergentWarns = warnSpy.mock.calls.filter((args) =>
+      String(args[0]).includes("Divergent options")
+    );
+    expect(divergentWarns.length).toBe(1);
+
+    warnSpy.mockRestore();
+  });
+
+  // ---- 40. Unsupported-type warning at most once per slot-generation ----
+  it("unsupported-type warning emits at most once per slot-generation", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { world, frame } = setup();
+    const entity = world.createEntity();
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
+      });
+    });
+
+    const warnCount1 = warnSpy.mock.calls.filter((args) =>
+      String(args[0]).includes("No loader registered")
+    ).length;
+    expect(warnCount1).toBe(1);
+
+    // Touch component with same data — should NOT warn again
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = { kind: "asset", type: "texture", uri: "diffuse.png" };
+    });
+
+    const warnCount2 = warnSpy.mock.calls.filter((args) =>
+      String(args[0]).includes("No loader registered")
+    ).length;
+    expect(warnCount2).toBe(1);
+
+    warnSpy.mockRestore();
+  });
+
+  // ---- 41. Missing sub fallback warning at most once per slot-generation ----
+  it("missing sub fallback warning emits at most once per slot-generation", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { world, mock, frame } = setup();
+    const entity = world.createEntity();
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: {
+          kind: "asset",
+          type: "glb",
+          uri: "robot.glb",
+          sub: "nonexistent",
+        },
+      });
+    });
+    mock.resolve("robot.glb", createMockGltf("root"));
+    await tick();
+    frame();
+
+    const subWarns = warnSpy.mock.calls.filter((args) =>
+      String(args[0]).includes("not found in glTF")
+    );
+    expect(subWarns.length).toBe(1);
+
+    warnSpy.mockRestore();
+  });
+
+  // ---- 42. Schema walker rejects multiple AssetRef fields per component ----
+  it("schema walker rejects multiple AssetRef fields per component", () => {
+    const { assetManager } = setup();
+    const badRegistry = {
+      MultiAsset: {
+        type: "object" as const,
+        properties: {
+          asset1: {
+            type: "object" as const,
+            properties: {},
+            meta: { kind: "assetRef" },
+          },
+          asset2: {
+            type: "object" as const,
+            properties: {},
+            meta: { kind: "assetRef" },
+          },
+        },
+      },
+    };
+
+    expect(() =>
+      createAssetRequestSystem(assetManager, new Map(), badRegistry)
+    ).toThrow(/Multiple AssetRef fields/);
+  });
+
+  // ---- 43. Per-entity clone independence; source disposed only at zero refCount ----
+  it("per-entity clone independence and source disposed only at zero refCount", async () => {
+    const { world, binding, mock, frame, assetManager } = setup();
+    const e1 = world.createEntity();
+    const e2 = world.createEntity();
+    const key = AssetManager.cacheKey("glb", "robot.glb");
+
+    frame(() => {
+      world.setComponent(e1, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "robot.glb" },
+      });
+      world.setComponent(e2, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "robot.glb" },
+      });
+    });
+
+    const sourceAsset = createMockGltf("robot");
+    mock.resolve("robot.glb", sourceAsset);
+    await tick();
+    frame();
+
+    // Two independent clones (different object identities)
+    const obj1 = binding.get(e1)!;
+    const obj2 = binding.get(e2)!;
+    expect(obj1).not.toBe(obj2);
+
+    // RefCount is 2
+    expect(assetManager.peek(key)?.refCount).toBe(2);
+
+    // Remove first entity's component — source NOT disposed
+    frame(() => {
+      world.removeComponent(e1, "ModelRenderer" as any);
+    });
+    expect(assetManager.peek(key)?.refCount).toBe(1);
+    expect(assetManager.peek(key)?.status).toBe("ready");
+    expect(mock.disposed).toHaveLength(0);
+
+    // Remove second entity's component — source disposed at zero refCount
+    frame(() => {
+      world.removeComponent(e2, "ModelRenderer" as any);
+    });
+    expect(assetManager.peek(key)).toBeUndefined();
+    expect(mock.disposed).toContain(sourceAsset);
+  });
 });

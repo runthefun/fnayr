@@ -383,6 +383,17 @@ export function createAssetRequestSystem(
         existing.status = "pending";
         existing.version++;
         existing.clearOnPending = false;
+      } else {
+        // Still no loader — update tracked metadata if URI/options/sub changed
+        const uriChanged = ref.uri !== existing.uri;
+        const subChanged = ref.sub !== existing.sub;
+        if (uriChanged || subChanged) {
+          existing.uri = ref.uri;
+          existing.options = ref.options;
+          existing.sub = ref.sub;
+          existing.type = ref.type;
+          existing.version++;
+        }
       }
     }
   }

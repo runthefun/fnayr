@@ -77,6 +77,7 @@ describe("AssetManager", () => {
 
   // ── same URI different options => one cache entry ─────────
   it("same URI different options shares one cache entry", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const mgr = new AssetManager();
     const { loader } = deferredLoader();
     mgr.registerLoader("texture", loader);
@@ -87,6 +88,47 @@ describe("AssetManager", () => {
     expect(e1).toBe(e2);
     expect(e1.refCount).toBe(2);
     expect(loader.load).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
+
+  // ── divergent options warning ───────────────────────────────
+  it("divergent options warning emits exactly once per load attempt", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mgr = new AssetManager();
+    const { loader } = deferredLoader();
+    mgr.registerLoader("texture", loader);
+
+    mgr.request("texture", "a.png", { quality: "high" });
+    mgr.request("texture", "a.png", { quality: "low" });
+    mgr.request("texture", "a.png", { quality: "medium" });
+
+    const divergentWarns = warnSpy.mock.calls.filter(
+      (args) => String(args[0]).includes("Divergent options"),
+    );
+    expect(divergentWarns.length).toBe(1);
+    warnSpy.mockRestore();
+  });
+
+  // ── equivalent options should not warn (key order differences) ─────
+  it("does not warn for semantically equivalent options with different key order", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mgr = new AssetManager();
+    const { loader } = deferredLoader();
+    mgr.registerLoader("texture", loader);
+
+    const opts1 = { quality: "high", mipmaps: true };
+    const opts2: Record<string, unknown> = {};
+    opts2.mipmaps = true;
+    opts2.quality = "high";
+
+    mgr.request("texture", "a.png", opts1);
+    mgr.request("texture", "a.png", opts2);
+
+    const divergentWarns = warnSpy.mock.calls.filter(
+      (args) => String(args[0]).includes("Divergent options"),
+    );
+    expect(divergentWarns.length).toBe(0);
+    warnSpy.mockRestore();
   });
 
   // ── ready transition + drainReady ─────────────────────────
@@ -286,6 +328,43 @@ describe("AssetManager", () => {
     mgr.request("texture", "a.png");
 
     // Failing notification from the invalidated entry should not leak.
+    expect(mgr.drainFailed().has(key)).toBe(false);
+  });
+
+  // ── releasing failed entry should clear stale failed notifications ───
+  it("release(error to zero) does not leak stale failed notification into next attempt", async () => {
+    const mgr = new AssetManager();
+    let rejectFirst!: (e: Error) => void;
+    const loader: AssetLoader<unknown> = {
+      load: vi.fn(
+        () =>
+          new Promise((resolve, reject) => {
+            if (!rejectFirst) {
+              rejectFirst = reject;
+            } else {
+              // Keep second request pending for this test.
+              void resolve;
+            }
+          }),
+      ),
+      dispose: vi.fn(),
+    };
+    mgr.registerLoader("texture", loader);
+
+    const key = AssetManager.cacheKey("texture", "a.png");
+    mgr.request("texture", "a.png");
+    rejectFirst(new Error("boom"));
+    await flush();
+
+    // Drop failed entry before draining failure queue.
+    mgr.release(key);
+    expect(mgr.peek(key)).toBeUndefined();
+
+    // New attempt for same key starts loading.
+    mgr.request("texture", "a.png");
+    expect(mgr.peek(key)?.status).toBe("loading");
+
+    // Old failed notification should not poison the new attempt.
     expect(mgr.drainFailed().has(key)).toBe(false);
   });
 
