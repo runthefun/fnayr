@@ -1008,4 +1008,68 @@ describe("Asset sync", () => {
       obj2.getObjectByProperty("uuid", skinned2!.skeleton.bones[0].uuid)
     ).toBeDefined();
   });
+
+  // ---- 29. Pending key switch should not clear existing mesh fallback ----
+  it("pending key switch keeps existing mesh binding until a model was active", () => {
+    const { world, binding, scene, slots, frame } = setup();
+    const entity = world.createEntity();
+
+    frame(() => {
+      world.setComponent(entity, "MeshRenderer" as any, {
+        geometry: "box",
+        color: [1, 0, 0, 1],
+      });
+    });
+
+    const mesh = binding.get(entity);
+    expect(mesh).toBeInstanceOf(THREE.Mesh);
+    expect(scene.children.includes(mesh!)).toBe(true);
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "a.glb" },
+      });
+    });
+
+    // First request is pending; mesh fallback should remain.
+    expect(slots.get(`${entity}:ModelRenderer`)?.status).toBe("pending");
+    expect(binding.get(entity)).toBe(mesh);
+
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = { kind: "asset", type: "glb", uri: "b.glb" };
+    });
+
+    // Switching pending key should not pre-clear fallback content.
+    expect(slots.get(`${entity}:ModelRenderer`)?.status).toBe("pending");
+    expect(binding.get(entity)).toBe(mesh);
+    expect(scene.children.includes(mesh!)).toBe(true);
+  });
+
+  // ---- 30. Existing cached error should fail new slots (not remain pending) ----
+  it("requesting a key already cached as error does not leave new slot pending", async () => {
+    const { world, slots, mock, frame } = setup();
+    const e1 = world.createEntity();
+
+    frame(() => {
+      world.setComponent(e1, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "bad.glb" },
+      });
+    });
+    mock.reject("bad.glb", new Error("load failed"));
+    await tick();
+    frame();
+
+    expect(slots.get(`${e1}:ModelRenderer`)?.status).toBe("failed");
+
+    const e2 = world.createEntity();
+    frame(() => {
+      world.setComponent(e2, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "bad.glb" },
+      });
+    });
+    frame();
+
+    expect(slots.get(`${e2}:ModelRenderer`)?.status).toBe("failed");
+  });
 });

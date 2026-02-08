@@ -112,6 +112,7 @@ export class AssetManager {
     const entry = this.cache.get(key);
     if (!entry || entry.status !== "error") return;
     this.cache.delete(key);
+    this._justFailed.delete(key);
   }
 
   getStats(): { total: number; loading: number; ready: number; error: number } {

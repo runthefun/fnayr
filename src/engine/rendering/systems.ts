@@ -281,7 +281,7 @@ export function createAssetRequestSystem(
     }
 
     const cacheKey = AssetManager.cacheKey(ref.type, ref.uri);
-    assetManager.request(ref.type, ref.uri, ref.options);
+    const entry = assetManager.request(ref.type, ref.uri, ref.options);
     slots.set(sk, {
       key: cacheKey,
       type: ref.type,
@@ -289,7 +289,7 @@ export function createAssetRequestSystem(
       options: ref.options,
       version: 0,
       sub: ref.sub,
-      status: "pending",
+      status: entry.status === "error" ? "failed" : "pending",
       clearOnPending: false,
     });
   }
@@ -340,15 +340,16 @@ export function createAssetRequestSystem(
         existing.clearOnPending = false;
         return;
       }
-      assetManager.request(ref.type, ref.uri, ref.options);
+      const wasActive = existing.status === "active";
+      const entry = assetManager.request(ref.type, ref.uri, ref.options);
       existing.key = newCacheKey;
       existing.type = ref.type;
       existing.uri = ref.uri;
       existing.options = ref.options;
       existing.sub = ref.sub;
-      existing.status = "pending";
+      existing.status = entry.status === "error" ? "failed" : "pending";
       existing.version++;
-      existing.clearOnPending = true;
+      existing.clearOnPending = wasActive;
       return;
     }
 

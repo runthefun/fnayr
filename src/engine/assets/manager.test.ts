@@ -257,6 +257,38 @@ describe("AssetManager", () => {
     expect(mgr.peek(key)).toBeUndefined();
   });
 
+  // ── invalidate should clear stale failed notifications ────
+  it("invalidate(error) clears queued failed notification for that key", async () => {
+    const mgr = new AssetManager();
+    let rejectFirst!: (e: Error) => void;
+    const loader: AssetLoader<unknown> = {
+      load: vi.fn(
+        () =>
+          new Promise((resolve, reject) => {
+            if (!rejectFirst) {
+              rejectFirst = reject;
+            } else {
+              // Keep second request pending for this test.
+              void resolve;
+            }
+          }),
+      ),
+      dispose: vi.fn(),
+    };
+    mgr.registerLoader("texture", loader);
+
+    const key = AssetManager.cacheKey("texture", "a.png");
+    mgr.request("texture", "a.png");
+    rejectFirst(new Error("boom"));
+    await flush();
+
+    mgr.invalidate(key);
+    mgr.request("texture", "a.png");
+
+    // Failing notification from the invalidated entry should not leak.
+    expect(mgr.drainFailed().has(key)).toBe(false);
+  });
+
   // ── invalidate missing / non-error is no-op ───────────────
   it("invalidate on missing or non-error key is a no-op", async () => {
     const mgr = new AssetManager();
