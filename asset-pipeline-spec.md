@@ -105,104 +105,29 @@ Worlds running asset systems must be created with `renderingResources`.
 
 These must hold regardless of implementation strategy.
 
-### Ref balance (slot-lifetime)
-Over a slot's lifetime (creation to destruction), exactly one ref is held at steady state. The slot's final cleanup always releases its one outstanding ref. Retry resets the ref via `invalidate()` + re-`request()` without changing the net contribution. No double-release, no leaked refs.
+### 1. Slot state machine
+A tracked slot has state ∈ {pending, active, failed} and a monotonically increasing generation counter. Valid transitions: `pending → active` (resolve success), `pending → failed` (resolve failure or unsupported type), `active → pending` (URI/sub change; generation advances), `failed → pending` (retryFailed, URI change, or unsupported-type recovery with loader now registered; generation advances). No other transitions occur — in particular `failed → active` and `active → failed` require passing through `pending`. Generation advances on URI change, sub change, and retry; it never decreases. A component update that changes neither URI nor sub causes no transition and no generation advance. A failed slot does not auto-recover on re-execution or unrelated updates.
 
-### Binding ownership
-An entity's ThreeBinding slot has at most one scene object at any time (last writer wins via `binding.set()`).
+### 2. Ref-slot conservation
+For any cache key k with a live entry, `peek(k).refCount` equals the number of tracked slots bound to k. Every slot contributes exactly one ref at steady state. All transitions preserve this: creation calls `request()` (+1), destruction calls `release()` (−1), URI change calls `release(old)` then `request(new)`, retry calls `invalidate()` + `request()` with no net change. When a slot is removed (component removal or entity destruction), its ref is released by end of frame. No double-release, no leaked refs.
 
-### Light independence
-Lights use their own per-type maps, never ThreeBinding. Models/meshes use ThreeBinding, never light maps. An entity can have both a light and a model/mesh with no conflict.
+### 3. Completion safety
+Each load attempt produces exactly one terminal event (ready or failed). A completion applies only if the slot's (entity, component, generation) still matches — stale completions are discarded and their assets disposed (mechanism behind AssetManager invariant 5). Per slot-generation, at most one instantiation occurs: the synchronous path (`peek` at system entry) and the async path (`drainReady`) are mutually exclusive per generation. Within a frame, generation advance and clearOnPending precede any completion application. If the component has been removed, forward mutations (instantiation) are discarded; only teardown mutations (clear, release) are permitted.
 
-### No cross-removal
-No system removes another system's component. `modelResolveSystem` never removes `MeshRenderer`. `renderSyncSystem` never removes `ModelRenderer`.
+### 4. Binding protocol
+An entity's ThreeBinding holds at most one scene object. `binding.set(entity, obj)` is the sole write path: it removes and disposes the previous object (geometry, materials) before adding the new one — no frame has both present, no orphan scene-graph nodes accumulate. Per frame, at most one system writes to a given entity's binding, enforced by system ordering and the ModelRenderer guard.
 
-### Component-presence safety
-No forward mutation (instantiation, overwrite) of an entity's binding after the relevant component has been removed (e.g., `ModelRenderer` removed but async load completes — completion is discarded). Teardown mutations (clearing binding, releasing refs) as part of removal handling are required, not prohibited.
+### 5. LoadingState
+LoadingState is computed once per frame at the end of `assetRequestSystem` from tracked slot counts (not `AssetManager.getStats()`), including slots for unsupported types. `total = pending + ready + failed`, where `ready` counts slots in the `active` state. Downstream slot transitions (by `modelResolveSystem`) are reflected next frame.
 
-### LoadingState accuracy
-`LoadingState` reflects the actual count of all tracked asset slots as of the most recent `assetRequestSystem` execution, including slots for unsupported types. It is not derived from `AssetManager.getStats()`. Slot transitions by downstream systems (e.g., `modelResolveSystem` moving slots from pending to active) are reflected in the next frame's update.
+### 6. System isolation
+Systems own disjoint resource domains: lights use per-type maps, models/meshes use ThreeBinding. No system removes another system's component.
 
-### LoadingState arithmetic
-For every frame: `total = pending + ready + failed`. `ready` is the count of slots in the internal `active` slot state.
+### 7. Identity
+Cache key identity is `(asset.type, asset.uri)` — `sub` and `options` do not affect it. At most one slot exists per `(entity, componentType, assetFieldPath)`. Each entity receives its own clone via `SkeletonUtils.clone()`; no two entities share a clone object identity. The set of asset-bearing components is fixed at system creation time.
 
-### No frame-time throws
-Unsupported asset types (no loader registered) are handled gracefully. The system must not crash the frame.
-
-### Cleanup completeness
-When an entity is destroyed or its asset-bearing component is removed, all associated resources are cleaned up (refs released, bindings cleared) by the end of the same frame.
-
-### Slot state exclusivity
-Each tracked asset slot is in exactly one of `pending`, `active`, or `failed` (or untracked). No slot occupies multiple states simultaneously.
-
-### Slot-refcount conservation
-For any cache key with a live entry, `assetManager.peek(key)?.refCount` equals the number of tracked slots currently bound to that key.
-
-### Slot uniqueness
-There is at most one tracked slot per `(entity, componentType, assetFieldPath)`.
-
-### Key stability
-Slot key identity depends only on `(asset.type, asset.uri)`. Changes to `sub` or `options` do not change the cache key.
-
-### Generation-gated completion
-Async completions apply only if the slot's `(entity, component, generation)` still matches. A stale completion (from a previous load attempt or a released slot) is discarded and its asset disposed if no other refs remain. This is the mechanism behind AssetManager invariant 5 (no stale corruption).
-
-### Update-before-completion ordering
-For URI/sub updates, slot generation advance and any clear-on-pending binding clear happen before completion application in the same frame.
-
-### Retry idempotence
-Multiple `retryFailed(key)` calls within the same frame produce at most one new `request()` per failed slot for that key.
-
-### Retry ref-neutrality
-Retrying a failed slot starts a new load attempt for the same key without changing that slot's net steady-state ref contribution (one slot contributes one ref before and after retry).
-
-### Terminal event uniqueness
-Each load attempt for a given key produces exactly one terminal event: either `ready` or `failed`, never both, never neither (barring release-before-settle, which is handled by the orphan leak invariant).
-
-### Clone identity isolation
-Different entities never share the same instantiated clone object identity. Each entity receives its own independent clone via `SkeletonUtils.clone()`.
-
-### Synchronous resolve path
-If `peek(key)?.status === "ready"` at the time modelResolveSystem runs for a newly-pending slot, instantiation occurs in the same frame without waiting for `drainReady()`. `drainReady()` is the async-completion path; the synchronous path checks `peek()` directly.
-
-### Binding scene-graph cleanup
-When `binding.set(entity, newObject)` replaces an existing object, or when a binding is cleared, the previous Three.js object is removed from the scene graph and has its resources disposed (geometry, materials). No orphan scene-graph nodes accumulate.
-
-### Monotonic slot generation
-A slot's generation counter is monotonically increasing. It advances on URI change, sub change, and retry. It never decreases or resets for a live slot.
-
-### Release-before-request on URI change
-When a slot's URI changes from A to B, `release(keyA)` is called before `request(keyB)`. This guarantees that if A and B resolve to the same cache key, the refCount is decremented before being re-incremented, preventing double-counting.
-
-### Failed slot stability
-A failed slot remains in the `failed` state indefinitely. It does not auto-retry on subsequent frames, on unrelated component updates, or on system re-execution. Recovery requires one of: (1) an explicit `retryFailed(key)` call, (2) a component update that changes the URI, or (3) for slots that failed due to an unsupported type, a component update when a loader for that type is now registered.
-
-### Single-writer per binding per frame
-For any entity, at most one system writes to its ThreeBinding in a given frame. System ordering and the ModelRenderer guard in renderSyncSystem guarantee that modelResolveSystem and renderSyncSystem never both write to the same entity's binding.
-
-### LoadingState update timing
-`LoadingState` is updated exactly once per frame, at the end of `assetRequestSystem` execution, after all adds/removes/updates have been processed. Downstream systems and consumers see a consistent snapshot for the remainder of the frame.
-
-### Slot state transitions
-The valid slot state transitions are: `pending → active` (resolve success), `pending → failed` (resolve failure or unsupported type), `active → pending` (URI/sub change, new generation), `failed → pending` (retry, URI change, or unsupported-type recovery). No other transitions occur. In particular, `failed → active` and `active → failed` never happen directly — both require passing through `pending`.
-
-### System re-execution idempotence
-If no components have been added, removed, or updated, and no async completions have settled since the last frame, running the system pipeline produces no side effects (no requests, no ref changes, no binding mutations, no warnings).
-
-### No double-instantiation per generation
-For a given slot at a given generation, at most one clone is instantiated. Neither the synchronous path (`peek`) nor the async path (`drainReady`) can produce a second clone for the same generation.
-
-### Loader failure isolation
-A loader's `load()` failure for one URI does not affect, cancel, or delay in-flight loads for other URIs using the same loader instance.
-
-### Same-URI-same-sub update is a no-op
-A component update where both `uri` and `sub` are unchanged produces no ref changes, no generation advance, no binding mutation, and no new request — regardless of changes to other fields like `options`.
-
-### Dispose-before-bind ordering
-When `binding.set(entity, newObject)` replaces an existing object, the old object is removed from the scene graph and disposed before the new object is added. There is no frame in which both objects exist in the scene simultaneously.
-
-### Schema discovery is static
-The set of components with AssetRef fields is determined at `createAssetRequestSystem()` time and does not change for the lifetime of the system. Dynamic schema changes after system creation are not supported.
+### 8. Resilience
+Unsupported asset types are tracked as failed without throwing. If no ECS changes occurred and no loads settled, re-execution is a no-op. A loader failure for one URI does not affect other in-flight loads. Multiple `retryFailed(key)` calls within the same frame produce at most one new request per failed slot.
 
 ---
 
