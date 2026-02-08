@@ -61,15 +61,16 @@ class AssetManager {
 
 ### Invariants
 
-1. **Dedup**: `cacheKey(type, uri)` is the identity. Same type+uri = same cache entry, regardless of `options`.
-2. **RefCount accuracy**: `entry.refCount` equals the number of unmatched `request()` calls for that key. Every `request()` increments, every `release()` decrements.
+1. **Dedup**: `cacheKey(type, uri)` is the identity. Same type+uri = same cache entry, regardless of `options`. Options are per-URI loader hints (decoder settings, quality), not per-consumer identity. The first request's options are used for the load; subsequent requests reuse the cached entry. If a later request supplies different options for the same key, a warning is logged (divergent options for the same URI is a caller bug).
+2. **RefCount accuracy (live attempt)**: for a live cache entry, `entry.refCount` equals the number of current holders of that key in the current load attempt. Every `request()` increments and every matched holder release decrements.
 3. **Zero-ref cleanup**: when refCount reaches 0, the asset is disposed and the cache entry is deleted.
 4. **No orphan leaks**: if an entry is released while its load is still in-flight, the settled asset is disposed (never silently dropped).
 5. **No stale corruption**: if the same key is released and re-requested before the original load settles, the old completion does not mutate the new entry.
-6. **Drain-once**: each key appears in at most one `drainReady()` or `drainFailed()` call. Draining clears the set.
+6. **Drain-once per attempt**: each key appears in at most one `drainReady()` or `drainFailed()` call per load attempt. Draining clears the set. A key may re-appear in a later drain if `invalidate()` + re-request creates a new load attempt (e.g., via `retryFailed`).
 7. **Idempotent release**: releasing an unknown/missing key is a no-op.
 8. **Invalidate scope**: `invalidate(key)` removes the entry only if its status is `error`. No-op otherwise.
-9. **Request precondition**: `request()` throws if no loader is registered for `type`.
+9. **Invalidate semantics**: invalidating an `error` entry resets that key's load attempt state. A subsequent `request()` starts a fresh entry for the same key.
+10. **Request precondition**: `request()` throws if no loader is registered for `type`.
 
 ---
 
@@ -104,8 +105,8 @@ Worlds running asset systems must be created with `renderingResources`.
 
 These must hold regardless of implementation strategy.
 
-### Ref balance
-Every `request()` made by the request system has exactly one matching `release()`. No double-release, no leaked refs.
+### Ref balance (slot-lifetime)
+Over a slot's lifetime (creation to destruction), exactly one ref is held at steady state. The slot's final cleanup always releases its one outstanding ref. Retry resets the ref via `invalidate()` + re-`request()` without changing the net contribution. No double-release, no leaked refs.
 
 ### Binding ownership
 An entity's ThreeBinding slot has at most one scene object at any time (last writer wins via `binding.set()`).
@@ -117,16 +118,70 @@ Lights use their own per-type maps, never ThreeBinding. Models/meshes use ThreeB
 No system removes another system's component. `modelResolveSystem` never removes `MeshRenderer`. `renderSyncSystem` never removes `ModelRenderer`.
 
 ### Component-presence safety
-No instantiation or binding mutation for an entity that no longer has the relevant component (e.g., `ModelRenderer` removed but async load completes).
+No forward mutation (instantiation, overwrite) of an entity's binding after the relevant component has been removed (e.g., `ModelRenderer` removed but async load completes — completion is discarded). Teardown mutations (clearing binding, releasing refs) as part of removal handling are required, not prohibited.
 
 ### LoadingState accuracy
 `LoadingState` reflects the actual count of all tracked asset slots, including slots for unsupported types. It is not derived from `AssetManager.getStats()`.
+
+### LoadingState arithmetic
+For every frame: `total = pending + ready + failed`. `ready` is the count of slots in the internal `active` slot state.
 
 ### No frame-time throws
 Unsupported asset types (no loader registered) are handled gracefully. The system must not crash the frame.
 
 ### Cleanup completeness
-When an entity is destroyed or its asset-bearing component is removed, all associated resources are cleaned up (refs released, bindings cleared) within bounded frames.
+When an entity is destroyed or its asset-bearing component is removed, all associated resources are cleaned up (refs released, bindings cleared) by the end of the same frame.
+
+### Slot state exclusivity
+Each tracked asset slot is in exactly one of `pending`, `active`, or `failed` (or untracked). No slot occupies multiple states simultaneously.
+
+### Slot-refcount conservation
+For any cache key with a live entry, `assetManager.peek(key)?.refCount` equals the number of tracked slots currently bound to that key.
+
+### Slot uniqueness
+There is at most one tracked slot per `(entity, componentType, assetFieldPath)`.
+
+### Key stability
+Slot key identity depends only on `(asset.type, asset.uri)`. Changes to `sub` or `options` do not change the cache key.
+
+### Generation-gated completion
+Async completions apply only if the slot's `(entity, component, generation)` still matches. A stale completion (from a previous load attempt or a released slot) is discarded and its asset disposed if no other refs remain. This is the mechanism behind AssetManager invariant 5 (no stale corruption).
+
+### Update-before-completion ordering
+For URI/sub updates, slot generation advance and any clear-on-pending binding clear happen before completion application in the same frame.
+
+### Retry idempotence
+Multiple `retryFailed(key)` calls within the same frame produce at most one new `request()` per failed slot for that key.
+
+### Retry ref-neutrality
+Retrying a failed slot starts a new load attempt for the same key without changing that slot's net steady-state ref contribution (one slot contributes one ref before and after retry).
+
+### Terminal event uniqueness
+Each load attempt for a given key produces exactly one terminal event: either `ready` or `failed`, never both, never neither (barring release-before-settle, which is handled by the orphan leak invariant).
+
+### Clone identity isolation
+Different entities never share the same instantiated clone object identity. Each entity receives its own independent clone via `SkeletonUtils.clone()`.
+
+### Synchronous resolve path
+If `peek(key)?.status === "ready"` at the time modelResolveSystem runs for a newly-pending slot, instantiation occurs in the same frame without waiting for `drainReady()`. `drainReady()` is the async-completion path; the synchronous path checks `peek()` directly.
+
+### Binding scene-graph cleanup
+When `binding.set(entity, newObject)` replaces an existing object, or when a binding is cleared, the previous Three.js object is removed from the scene graph and has its resources disposed (geometry, materials). No orphan scene-graph nodes accumulate.
+
+### Monotonic slot generation
+A slot's generation counter is monotonically increasing. It advances on URI change, sub change, and retry. It never decreases or resets for a live slot.
+
+### Release-before-request on URI change
+When a slot's URI changes from A to B, `release(keyA)` is called before `request(keyB)`. This guarantees that if A and B resolve to the same cache key, the refCount is decremented before being re-incremented, preventing double-counting.
+
+### Failed slot stability
+A failed slot remains in the `failed` state indefinitely. It does not auto-retry on subsequent frames, on unrelated component updates, or on system re-execution. Recovery requires either an explicit `retryFailed(key)` call or a component update that changes the URI.
+
+### Single-writer per binding per frame
+For any entity, at most one system writes to its ThreeBinding in a given frame. System ordering and the ModelRenderer guard in renderSyncSystem guarantee that modelResolveSystem and renderSyncSystem never both write to the same entity's binding.
+
+### LoadingState update timing
+`LoadingState` is updated exactly once per frame, at the end of `assetRequestSystem` execution, after all adds/removes/updates have been processed. Downstream systems and consumers see a consistent snapshot for the remainder of the frame.
 
 ---
 
@@ -146,19 +201,19 @@ Factory: `createAssetRequestSystem(assetManager, slots)`
 | Component added, non-empty URI, loader exists | Request issued, asset tracked as pending |
 | Component added, non-empty URI, no loader | Asset tracked as failed, warning logged, no request issued |
 | Component added, empty URI | Ignored, nothing tracked |
-| Component updated, URI changed | Old ref released, new ref requested. If old was active, old binding cleared immediately (same frame). |
-| Component updated, same URI, sub changed | No new load. If was active, re-instantiate from cached asset with new sub (same frame). |
+| Component updated, URI changed | Old ref released, new ref requested, slot transitions to pending. Binding clear is handled by resolve/binding systems in the same frame (clearOnPending — always enabled). |
+| Component updated, same URI, sub changed | No new load. Slot generation advances so resolve/binding systems can refresh instantiation from cached asset. |
 | Component updated, empty → non-empty URI | Treated as fresh add |
 | Component updated, non-empty → empty URI | Ref released, tracking removed |
-| Component updated, previously unsupported type, loader now registered | Transitions from failed to pending, request issued |
+| Component updated (any field write), previously unsupported type, loader now registered | Transitions from failed to pending, request issued. Loader registration alone does not trigger recovery; an explicit component update is required. |
 | Component removed | Ref released, tracking removed |
 | Entity destroyed | Ref released, tracking removed |
 
 ### LoadingState
-Updated each frame from tracked slot counts.
+Updated once at the end of each execution from tracked slot counts (see LoadingState update timing invariant).
 
 ### retryFailed(key)
-Public method. Invalidates the error entry in the manager, then re-requests for all tracked slots that failed with a matching key. Correct refcounts are maintained.
+Public method. Invalidates the manager's `error` entry for `key`, then re-requests all tracked failed slots for that key, creating one fresh load attempt. Net slot-to-ref conservation is preserved (one slot, one ref).
 
 ---
 
