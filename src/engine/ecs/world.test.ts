@@ -38,15 +38,14 @@ describe("EcsWorld", () => {
     expect(world.hasComponent(entity, "Name")).toBe(false);
   });
 
-  it("rejects adding components to dead entities", () => {
+  it("silently ignores setComponent on dead entities", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
 
     world.destroyEntity(entity);
 
-    expect(() =>
-      world.setComponent(entity, "Transform", { x: 5 })
-    ).toThrow(/not alive/i);
+    world.setComponent(entity, "Transform", { x: 5 });
+    expect(world.hasComponent(entity, "Transform")).toBe(false);
   });
 
   it("treats dead entities as empty for reads", () => {

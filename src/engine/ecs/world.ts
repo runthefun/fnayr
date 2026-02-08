@@ -246,7 +246,9 @@ export class EcsWorld<
     type: K,
     data?: ComponentData<R, K>
   ): void {
-    this.assertAlive(entity, "add component");
+    if (!this.entityManager.isAlive(entity)) {
+      return;
+    }
     const schema = this.registry[type];
     let value: unknown = data;
     if (schema.type === "tag") {
@@ -686,11 +688,6 @@ export class EcsWorld<
     };
   }
 
-  private assertAlive(entity: number, action: string): void {
-    if (!this.entityManager.isAlive(entity)) {
-      throw new Error(`Cannot ${action}: entity ${entity} is not alive`);
-    }
-  }
 
   private assertRegistered(type: ComponentType<R>): void {
     if (!hasOwn(this.registry, type)) {
