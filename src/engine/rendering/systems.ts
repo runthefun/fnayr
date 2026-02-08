@@ -1,14 +1,33 @@
 import * as THREE from "three";
 import { clone as skeletonClone } from "three/addons/utils/SkeletonUtils.js";
-import type { ComponentRegistry, World } from "../ecs/types";
+import type { ComponentRegistry, ComponentType, World } from "../ecs/types";
 import type { Commands } from "../ecs/commands";
 import type { System } from "../ecs/systems";
 import type { ThreeBinding } from "./binding";
-import type { renderingRegistry } from "./components";
+import type { renderingRegistry, renderingResources } from "./components";
 import { AssetManager } from "../assets/manager";
 import type { SchemaLike } from "../schema";
 
 type RenderRegistry = typeof renderingRegistry & ComponentRegistry;
+type RenderResources = typeof renderingResources;
+
+// Concrete data shapes for typed assertions (mirrors schema-derived values)
+type Transform3DData = { position: number[]; rotation: number[]; scale: number[] };
+
+type MeshData = {
+  kind: "mesh";
+  geometry: "box" | "sphere" | "plane";
+  color: [number, number, number, number];
+};
+
+type ModelData = {
+  kind: "model";
+  asset: { type: string; uri: string; sub?: string; options?: Record<string, unknown> };
+};
+
+type VisualRendererData = MeshData | ModelData;
+
+type GltfAsset = { gltf: { scene: THREE.Object3D } };
 
 export type SlotEntry = {
   key: string;
@@ -48,11 +67,11 @@ export function applyTransform(
   obj.scale.set(data.scale[0], data.scale[1], data.scale[2]);
 }
 
-function createMeshObject(
-  mr: any,
+function createMeshObject<R extends RenderRegistry>(
+  mr: MeshData,
   entity: number,
-  world: World<any>,
-  binding: ThreeBinding<any>,
+  world: World<R>,
+  binding: ThreeBinding<R>,
 ): void {
   const geometry = createGeometry(mr.geometry);
   const material = new THREE.MeshStandardMaterial({
@@ -63,7 +82,7 @@ function createMeshObject(
   const mesh = new THREE.Mesh(geometry, material);
   mesh.userData.entityId = entity;
 
-  const transform = world.getComponent(entity, "Transform3D" as any) as any;
+  const transform = world.getComponent(entity, "Transform3D" as ComponentType<R>) as Transform3DData | undefined;
   if (transform) {
     applyTransform(mesh, transform);
   }
@@ -81,8 +100,8 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
 ): System<R> {
   return (world: World<R>, _dt: number, _commands: Commands<R>) => {
     // 1. Added VisualRenderer
-    for (const entity of world.getAdded("VisualRenderer" as any)) {
-      const vr = world.getComponent(entity, "VisualRenderer" as any) as any;
+    for (const entity of world.getAdded("VisualRenderer" as ComponentType<R>)) {
+      const vr = world.getComponent(entity, "VisualRenderer" as ComponentType<R>) as VisualRendererData | undefined;
       if (!vr) continue;
 
       if (vr.kind === "mesh") {
@@ -92,13 +111,13 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
     }
 
     // 2. Removed VisualRenderer — delete binding
-    for (const entity of world.getRemoved("VisualRenderer" as any)) {
+    for (const entity of world.getRemoved("VisualRenderer" as ComponentType<R>)) {
       binding.delete(entity);
     }
 
     // 3. Updated VisualRenderer — dispatch on kind
-    for (const entity of world.getUpdated("VisualRenderer" as any)) {
-      const vr = world.getComponent(entity, "VisualRenderer" as any) as any;
+    for (const entity of world.getUpdated("VisualRenderer" as ComponentType<R>)) {
+      const vr = world.getComponent(entity, "VisualRenderer" as ComponentType<R>) as VisualRendererData | undefined;
       if (!vr) continue;
 
       if (vr.kind === "mesh") {
@@ -156,18 +175,18 @@ export function createTransformSyncSystem<R extends RenderRegistry>(
 
   return (world: World<R>, _dt: number, _commands: Commands<R>) => {
     // 1. Sync Transform3D → Object3D position/rotation/scale
-    for (const entity of world.getAdded("Transform3D" as any)) {
+    for (const entity of world.getAdded("Transform3D" as ComponentType<R>)) {
       if (shouldSkipTransform?.(entity)) continue;
       const obj = binding.get(entity);
       if (!obj) continue;
-      const transform = world.getComponent(entity, "Transform3D" as any) as any;
+      const transform = world.getComponent(entity, "Transform3D" as ComponentType<R>) as Transform3DData | undefined;
       if (transform) applyTransform(obj, transform);
     }
-    for (const entity of world.getUpdated("Transform3D" as any)) {
+    for (const entity of world.getUpdated("Transform3D" as ComponentType<R>)) {
       if (shouldSkipTransform?.(entity)) continue;
       const obj = binding.get(entity);
       if (!obj) continue;
-      const transform = world.getComponent(entity, "Transform3D" as any) as any;
+      const transform = world.getComponent(entity, "Transform3D" as ComponentType<R>) as Transform3DData | undefined;
       if (transform) applyTransform(obj, transform);
     }
 
@@ -196,7 +215,7 @@ export function createTransformSyncSystem<R extends RenderRegistry>(
 /* ------------------------------------------------------------------ */
 
 function findAssetRefPaths(
-  registry: Record<string, any>,
+  registry: Record<string, SchemaLike>,
 ): Map<string, string[]> {
   const result = new Map<string, string[]>();
 
@@ -247,11 +266,11 @@ function findAssetRefPaths(
   return result;
 }
 
-function getNestedValue(obj: any, path: string[]): any {
-  let current = obj;
+function getNestedValue(obj: unknown, path: string[]): unknown {
+  let current: unknown = obj;
   for (const key of path) {
     if (current == null) return undefined;
-    current = current[key];
+    current = (current as Record<string, unknown>)[key];
   }
   return current;
 }
@@ -263,7 +282,7 @@ function getNestedValue(obj: any, path: string[]): any {
 export function createAssetRequestSystem(
   assetManager: AssetManager,
   slots: Map<string, SlotEntry>,
-  registry: Record<string, any>,
+  registry: Record<string, SchemaLike>,
 ): System<RenderRegistry> & { retryFailed(key: string): void } {
   // Pre-compute asset-ref paths per component type
   const assetRefPaths = findAssetRefPaths(registry);
@@ -279,7 +298,7 @@ export function createAssetRequestSystem(
   ): { type: string; uri: string; sub?: string; options?: Record<string, unknown> } | undefined {
     const path = assetRefPaths.get(componentType);
     if (!path) return undefined;
-    const component = world.getComponent(entity, componentType as any) as any;
+    const component = world.getComponent(entity, componentType);
     if (!component) return undefined;
     const ref = getNestedValue(component, path);
     if (!ref) return undefined;
@@ -448,17 +467,17 @@ export function createAssetRequestSystem(
     // Process each asset-bearing component type
     for (const componentType of assetRefPaths.keys()) {
       // Handle added
-      for (const entity of world.getAdded(componentType as any)) {
+      for (const entity of world.getAdded(componentType)) {
         handleAdded(entity, componentType, world);
       }
 
       // Handle updated
-      for (const entity of world.getUpdated(componentType as any)) {
+      for (const entity of world.getUpdated(componentType)) {
         handleUpdated(entity, componentType, world, emptyUriCleanup);
       }
 
       // Handle removed
-      for (const entity of world.getRemoved(componentType as any)) {
+      for (const entity of world.getRemoved(componentType)) {
         const sk = slotKey(entity, componentType);
         const slot = slots.get(sk);
         if (slot) {
@@ -510,7 +529,7 @@ export function createAssetRequestSystem(
       }
     }
     const total = slots.size;
-    (world as any).setResource("LoadingState", {
+    (world as World<RenderRegistry, RenderResources>).setResource("LoadingState", {
       pending,
       ready,
       failed,
@@ -544,11 +563,11 @@ export function createAssetRequestSystem(
 /* ------------------------------------------------------------------ */
 
 function instantiateGltf(
-  gltfAsset: { gltf: { scene: THREE.Object3D } },
+  gltfAsset: GltfAsset,
   sub: string | undefined,
   entity: number,
-  world: World<any>,
-  binding: ThreeBinding<any>,
+  world: World<RenderRegistry>,
+  binding: ThreeBinding<RenderRegistry>,
 ): void {
   const clone = skeletonClone(gltfAsset.gltf.scene);
 
@@ -577,7 +596,7 @@ function instantiateGltf(
   }
 
   // Apply Transform3D if present
-  const transform = world.getComponent(entity, "Transform3D" as any) as any;
+  const transform = world.getComponent(entity, "Transform3D") as Transform3DData | undefined;
   if (transform) {
     applyTransform(clone, transform);
   }
@@ -593,13 +612,13 @@ function instantiateGltf(
 
 export function createModelResolveSystem(
   assetManager: AssetManager,
-  binding: ThreeBinding<any>,
+  binding: ThreeBinding<RenderRegistry>,
   slots: Map<string, SlotEntry>,
 ): System<RenderRegistry> {
   return (world: World<RenderRegistry>, _dt: number, _commands: Commands<RenderRegistry>) => {
     // 1. Empty-URI cleanup: updated VisualRenderer with kind=model and empty URI
-    for (const entity of world.getUpdated("VisualRenderer" as any)) {
-      const vr = world.getComponent(entity, "VisualRenderer" as any) as any;
+    for (const entity of world.getUpdated("VisualRenderer")) {
+      const vr = world.getComponent(entity, "VisualRenderer") as VisualRendererData | undefined;
       if (vr && vr.kind === "model" && !vr.asset?.uri && binding.has(entity)) {
         binding.delete(entity);
       }
@@ -609,8 +628,8 @@ export function createModelResolveSystem(
     for (const [sk, slot] of slots) {
       if ((slot.status === "pending" || slot.status === "failed") && slot.clearOnPending) {
         const entityId = parseInt(sk.split(":")[0], 10);
-        if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer" as any)) continue;
-        const vr = world.getComponent(entityId, "VisualRenderer" as any) as any;
+        if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer")) continue;
+        const vr = world.getComponent(entityId, "VisualRenderer") as VisualRendererData | undefined;
         if (!vr || vr.kind !== "model") continue;
         binding.delete(entityId);
         slot.clearOnPending = false;
@@ -625,12 +644,12 @@ export function createModelResolveSystem(
         if (!justReady.has(slot.key)) continue;
         if (!sk.endsWith(":VisualRenderer")) continue;
         const entityId = parseInt(sk.split(":")[0], 10);
-        if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer" as any)) continue;
-        const vr = world.getComponent(entityId, "VisualRenderer" as any) as any;
+        if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer")) continue;
+        const vr = world.getComponent(entityId, "VisualRenderer") as VisualRendererData | undefined;
         if (!vr || vr.kind !== "model") continue;
         const entry = assetManager.peek(slot.key);
         if (entry && entry.status === "ready") {
-          instantiateGltf(entry.asset as any, slot.sub, entityId, world, binding);
+          instantiateGltf(entry.asset as GltfAsset, slot.sub, entityId, world, binding);
           slot.status = "active";
         }
       }
@@ -641,12 +660,12 @@ export function createModelResolveSystem(
       if (slot.status !== "pending") continue;
       if (!sk.endsWith(":VisualRenderer")) continue;
       const entityId = parseInt(sk.split(":")[0], 10);
-      if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer" as any)) continue;
-      const vr = world.getComponent(entityId, "VisualRenderer" as any) as any;
+      if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer")) continue;
+      const vr = world.getComponent(entityId, "VisualRenderer") as VisualRendererData | undefined;
       if (!vr || vr.kind !== "model") continue;
       const entry = assetManager.peek(slot.key);
       if (entry && entry.status === "ready") {
-        instantiateGltf(entry.asset as any, slot.sub, entityId, world, binding);
+        instantiateGltf(entry.asset as GltfAsset, slot.sub, entityId, world, binding);
         slot.status = "active";
       }
     }
