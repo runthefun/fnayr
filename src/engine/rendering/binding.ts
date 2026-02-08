@@ -40,6 +40,16 @@ export class ThreeBinding<
     const prev = this.objectOf.get(entity);
     if (prev && prev !== obj) {
       prev.removeFromParent();
+      prev.traverse((node) => {
+        if (node instanceof THREE.Mesh) {
+          node.geometry?.dispose();
+          if (Array.isArray(node.material)) {
+            node.material.forEach((m: THREE.Material) => m.dispose());
+          } else {
+            (node.material as THREE.Material)?.dispose();
+          }
+        }
+      });
     }
     this.objectOf.set(entity, obj);
   }

@@ -356,9 +356,9 @@ export function createAssetRequestSystem(
     // Branch B: same key, sub changed
     if (ref.sub !== existing.sub) {
       existing.sub = ref.sub;
+      existing.version++;
       if (existing.status === "active") {
         existing.status = "pending";
-        existing.version++;
         existing.clearOnPending = true;
       }
       return;
@@ -568,9 +568,9 @@ export function createModelResolveSystem(
       }
     }
 
-    // 3. Pre-clear pass: slots with pending + clearOnPending
+    // 3. Pre-clear pass: slots with clearOnPending (pending or failed)
     for (const [sk, slot] of slots) {
-      if (slot.status === "pending" && slot.clearOnPending) {
+      if ((slot.status === "pending" || slot.status === "failed") && slot.clearOnPending) {
         const entityId = parseInt(sk.split(":")[0], 10);
         if (!world.isAlive(entityId) || !world.hasComponent(entityId, "ModelRenderer" as any)) continue;
         binding.delete(entityId);

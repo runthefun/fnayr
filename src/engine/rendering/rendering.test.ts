@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { createWorld } from "../ecs/world";
 import { CommandBuffer } from "../ecs/commands";
@@ -207,5 +207,35 @@ describe("Rendering bridge", () => {
     });
 
     expect(mesh.geometry).toBeInstanceOf(THREE.SphereGeometry);
+  });
+
+  it("binding replacement disposes previous mesh resources", () => {
+    const { world, binding, frame } = setup();
+    const entity = world.createEntity();
+
+    frame(() => {
+      world.setComponent(entity, "MeshRenderer", {
+        geometry: "box",
+        color: [1, 0, 0, 1],
+      });
+    });
+
+    const firstMesh = binding.get(entity) as THREE.Mesh;
+    const geometryDisposeSpy = vi.spyOn(firstMesh.geometry, "dispose");
+    const materialDisposeSpy = vi.spyOn(
+      firstMesh.material as THREE.Material,
+      "dispose"
+    );
+
+    const replacement = new THREE.Mesh(
+      new THREE.SphereGeometry(),
+      new THREE.MeshStandardMaterial()
+    );
+    replacement.userData.entityId = entity;
+    binding.set(entity, replacement);
+    binding.scene.add(replacement);
+
+    expect(geometryDisposeSpy).toHaveBeenCalledTimes(1);
+    expect(materialDisposeSpy).toHaveBeenCalledTimes(1);
   });
 });

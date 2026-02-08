@@ -941,6 +941,72 @@ describe("Asset sync", () => {
     expect(slots.get(sk)?.status).toBe("failed");
   });
 
+  // ---- 27b. Pending slot sub change should advance generation ----
+  it("pending slot sub change advances generation", () => {
+    const { world, slots, frame } = setup();
+    const entity = world.createEntity();
+    const sk = `${entity}:ModelRenderer`;
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: {
+          kind: "asset",
+          type: "glb",
+          uri: "robot.glb",
+          sub: "arm",
+        },
+      });
+    });
+
+    expect(slots.get(sk)?.status).toBe("pending");
+    expect(slots.get(sk)?.version).toBe(0);
+
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = {
+        kind: "asset",
+        type: "glb",
+        uri: "robot.glb",
+        sub: "head",
+      };
+    });
+
+    expect(slots.get(sk)?.status).toBe("pending");
+    expect(slots.get(sk)?.version).toBe(1);
+  });
+
+  // ---- 27c. Failed slot sub change should advance generation ----
+  it("failed slot sub change advances generation", async () => {
+    const { world, slots, mock, frame } = setup();
+    const entity = world.createEntity();
+    const sk = `${entity}:ModelRenderer`;
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "bad.glb", sub: "arm" },
+      });
+    });
+    mock.reject("bad.glb", new Error("load failed"));
+    await tick();
+    frame();
+
+    expect(slots.get(sk)?.status).toBe("failed");
+    expect(slots.get(sk)?.version).toBe(0);
+
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = {
+        kind: "asset",
+        type: "glb",
+        uri: "bad.glb",
+        sub: "head",
+      };
+    });
+
+    expect(slots.get(sk)?.status).toBe("failed");
+    expect(slots.get(sk)?.version).toBe(1);
+  });
+
   // ---- 27. retryFailed should handle unsupported-type failed slots ----
   it("retryFailed re-requests unsupported-type slot after loader registration", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -1071,6 +1137,42 @@ describe("Asset sync", () => {
     frame();
 
     expect(slots.get(`${e2}:ModelRenderer`)?.status).toBe("failed");
+  });
+
+  // ---- 30b. Active model should clear when switching to URI already cached as error ----
+  it("switching active model to cached-error URI clears stale binding immediately", async () => {
+    const { world, binding, slots, mock, frame } = setup();
+
+    const badEntity = world.createEntity();
+    frame(() => {
+      world.setComponent(badEntity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "bad.glb" },
+      });
+    });
+    mock.reject("bad.glb", new Error("load failed"));
+    await tick();
+    frame();
+
+    const entity = world.createEntity();
+    const sk = `${entity}:ModelRenderer`;
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "good.glb" },
+      });
+    });
+    mock.resolve("good.glb", createMockGltf("good"));
+    await tick();
+    frame();
+
+    expect(slots.get(sk)?.status).toBe("active");
+    expect(binding.has(entity)).toBe(true);
+
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = { kind: "asset", type: "glb", uri: "bad.glb" };
+    });
+
+    expect(binding.has(entity)).toBe(false);
   });
 
   // ---- 31. Two entities same URI: one load, two independent clones ----
