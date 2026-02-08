@@ -16,6 +16,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONVO_FILE="$SCRIPT_DIR/conversation.md"
+REVIEWER_TEMPLATE="$SCRIPT_DIR/REVIEWER.md"
+PROPOSER_TEMPLATE="$SCRIPT_DIR/PROPOSER.md"
 
 # ─── Config ───────────────────────────────────────────────────────────
 PLAN_OPEN='<<<PLAN>>>'
@@ -67,48 +69,44 @@ run_codex() {
     2>/dev/null
 }
 
+# ─── Template rendering ──────────────────────────────────────────────
+# Reads a template file and replaces {{KEY}} placeholders with values.
+# Usage: render_template <file> KEY1 VAL1 KEY2 VAL2 ...
+
+render_template() {
+  local file="$1"; shift
+  local result
+  result="$(cat "$file")"
+
+  while [[ $# -ge 2 ]]; do
+    local key="$1" val="$2"; shift 2
+    # Use awk to avoid sed delimiter issues with arbitrary content
+    result="$(awk -v pat="{{${key}}}" -v rep="$val" '{
+      idx = index($0, pat)
+      while (idx > 0) {
+        $0 = substr($0, 1, idx-1) rep substr($0, idx + length(pat))
+        idx = index($0, pat)
+      }
+      print
+    }' <<< "$result")"
+  done
+
+  printf '%s' "$result"
+}
+
 # ─── Reviewer prompt (Codex) ─────────────────────────────────────────
 
 build_reviewer_prompt() {
   local round="$1"
   local plan
-
   plan="$(cat "$PLAN_FILE")"
 
-  cat <<PROMPT
-## Context
-
-We are two AI agents collaborating to refine an implementation plan.
-There are two roles:
-- **Proposer (Claude)**: Owns and edits the plan. Incorporates feedback by updating the plan.
-- **Reviewer (Codex)**: Reviews the plan. Either approves it or emits reservations. Does NOT edit the plan.
-
-You are the **Reviewer (Codex)**.
-
-Your role is to critically review the current plan and either approve it or raise reservations.
-You do NOT modify the plan. You do NOT suggest rewrites. You only assess and give feedback.
-
-## Current Plan
-
-$plan
-
-## Instructions (round $round)
-
-Review the plan above.
-
-Then choose exactly ONE of:
-
-**A) Approve** — The plan is solid, complete, and ready for implementation.
-Output the marker below on its own line:
-$APPROVE_MARKER
-You may add a short note explaining why the plan looks good.
-
-**B) Raise reservations** — You have concerns that must be addressed before the plan is ready.
-List each reservation clearly and concisely. Be specific: say what is wrong and why.
-Do NOT rewrite the plan or propose exact wording. Just describe the issues.
-
-Remember: you are the Reviewer. You only review. You never output plan markers ($PLAN_OPEN / $PLAN_CLOSE).
-PROMPT
+  render_template "$REVIEWER_TEMPLATE" \
+    PLAN           "$plan" \
+    ROUND          "$round" \
+    APPROVE_MARKER "$APPROVE_MARKER" \
+    PLAN_OPEN      "$PLAN_OPEN" \
+    PLAN_CLOSE     "$PLAN_CLOSE"
 }
 
 # ─── Proposer prompt (Claude) ────────────────────────────────────────
@@ -117,45 +115,14 @@ build_proposer_prompt() {
   local round="$1"
   local remarks="$2"
   local plan
-
   plan="$(cat "$PLAN_FILE")"
 
-  cat <<PROMPT
-## Context
-
-We are two AI agents collaborating to refine an implementation plan.
-There are two roles:
-- **Proposer (Claude)**: Owns and edits the plan. Incorporates feedback by updating the plan.
-- **Reviewer (Codex)**: Reviews the plan. Either approves it or emits reservations. Does NOT edit the plan.
-
-You are the **Proposer (Claude)**.
-
-Your role is to maintain the plan. When the Reviewer raises reservations, you read them,
-update the plan to address the concerns, and output a summary of what you changed.
-
-## Current Plan
-
-$plan
-
-## Reviewer's Reservations (round $round)
-
-$remarks
-
-## Instructions
-
-1. Read the Reviewer's reservations above carefully.
-2. Update the plan to address each concern.
-3. Output the FULL updated plan between these markers:
-   $PLAN_OPEN
-   (entire updated plan here)
-   $PLAN_CLOSE
-   The content between the markers will REPLACE the plan file entirely.
-   Keep all parts of the plan that are not affected by the reservations.
-4. Outside the markers, write a concise summary of what you changed and why.
-
-Remember: you are the Proposer. You always output the plan between the markers.
-You never approve or reject — that is the Reviewer's job.
-PROMPT
+  render_template "$PROPOSER_TEMPLATE" \
+    PLAN       "$plan" \
+    ROUND      "$round" \
+    REMARKS    "$remarks" \
+    PLAN_OPEN  "$PLAN_OPEN" \
+    PLAN_CLOSE "$PLAN_CLOSE"
 }
 
 # ─── Parse args ──────────────────────────────────────────────────────
@@ -192,6 +159,13 @@ if [[ ! -f "$PLAN_FILE" ]]; then
   echo "Error: plan file not found: $PLAN_FILE"
   exit 1
 fi
+
+for tmpl in "$REVIEWER_TEMPLATE" "$PROPOSER_TEMPLATE"; do
+  if [[ ! -f "$tmpl" ]]; then
+    echo "Error: template not found: $tmpl"
+    exit 1
+  fi
+done
 
 # ─── Initialize conversation ─────────────────────────────────────────
 
