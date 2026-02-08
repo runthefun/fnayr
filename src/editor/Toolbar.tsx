@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { Save, FolderOpen, Focus } from "lucide-react";
 import { useEditor, useSelectedEntity } from "./useEditor";
 import { worldToJson } from "../engine/ecs/bridge";
 import { parseWorld } from "../engine/world";
@@ -100,14 +101,16 @@ export function Toolbar() {
     <div className="flex gap-2 px-2 py-1.5 border-b border-subtle bg-panel">
       <button
         onClick={handleSave}
-        className="px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle"
+        className="flex items-center gap-1 px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle"
       >
+        <Save size={14} />
         Save
       </button>
       <button
         onClick={handleLoad}
-        className="px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle"
+        className="flex items-center gap-1 px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle"
       >
+        <FolderOpen size={14} />
         Load
       </button>
       <button
@@ -117,8 +120,9 @@ export function Toolbar() {
           if (obj) controls.focusOnObject(obj);
         }}
         disabled={selectedEntity == null}
-        className="px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle disabled:opacity-40 disabled:cursor-default"
+        className="flex items-center gap-1 px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle disabled:opacity-40 disabled:cursor-default"
       >
+        <Focus size={14} />
         Focus
       </button>
       <input

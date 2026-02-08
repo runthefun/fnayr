@@ -1,3 +1,4 @@
+import { Plus, Trash2 } from "lucide-react";
 import { useEditor, useSelectedEntity, useEntities } from "./useEditor";
 
 export function EntityTree() {
@@ -72,7 +73,7 @@ export function EntityTree() {
               className="text-muted hover:text-primary text-[10px] ml-1 cursor-pointer"
               title="Delete entity"
             >
-              x
+              <Trash2 size={12} />
             </button>
           </span>
         </div>
@@ -90,7 +91,7 @@ export function EntityTree() {
           className="text-muted hover:text-primary text-sm leading-none cursor-pointer"
           title="Create entity"
         >
-          +
+          <Plus size={14} />
         </button>
       </div>
       {roots.map((entity) => renderEntity(entity, 0))}

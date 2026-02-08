@@ -1,4 +1,5 @@
 import { type ChangeEvent } from "react";
+import { X } from "lucide-react";
 import { useEditor, useSelectedEntity } from "./useEditor";
 import { SchemaField } from "./fields/SchemaField";
 import { getDefault } from "../engine/schema";
@@ -76,7 +77,7 @@ export function Inspector() {
                 className="text-muted hover:text-primary text-[10px] cursor-pointer"
                 title={`Remove ${type}`}
               >
-                x
+                <X size={12} />
               </button>
             </div>
             <div className="px-2 py-1.5">
