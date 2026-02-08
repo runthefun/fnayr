@@ -4,6 +4,8 @@ import { createWorld } from "../ecs/world";
 import { CommandBuffer } from "../ecs/commands";
 import { renderingRegistry, renderingResources } from "./components";
 import { ThreeBinding } from "./binding";
+import { defineSchema, s } from "../schema";
+import { assetRefSchema } from "../asset";
 import {
   createRenderSyncSystem,
   createTransformSyncSystem,
@@ -1632,5 +1634,146 @@ describe("Asset sync", () => {
     });
     expect(assetManager.peek(key)).toBeUndefined();
     expect(mock.disposed).toContain(sourceAsset);
+  });
+
+  // ---- 44. Model removal should hand ownership back to MeshRenderer in same frame ----
+  it("removing ModelRenderer restores existing MeshRenderer binding in the same frame", async () => {
+    const { world, binding, mock, frame } = setup();
+    const entity = world.createEntity();
+
+    frame(() => {
+      world.setComponent(entity, "MeshRenderer" as any, {
+        geometry: "box",
+        color: [1, 0, 0, 1],
+      });
+    });
+    expect(binding.get(entity)).toBeInstanceOf(THREE.Mesh);
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "robot.glb" },
+      });
+    });
+    mock.resolve("robot.glb", createMockGltf("robot"));
+    await tick();
+    frame();
+    expect(binding.get(entity)).toBeInstanceOf(THREE.Group);
+
+    frame(() => {
+      world.removeComponent(entity, "ModelRenderer" as any);
+    });
+
+    expect(world.hasComponent(entity, "MeshRenderer" as any)).toBe(true);
+    expect(binding.has(entity)).toBe(true);
+    expect(binding.get(entity)).toBeInstanceOf(THREE.Mesh);
+  });
+
+  // ---- 45. Active->unsupported transition should clear stale binding ----
+  it("switching an active model to an unsupported type clears the old binding immediately", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { world, binding, slots, mock, frame } = setup();
+    const entity = world.createEntity();
+    const sk = `${entity}:ModelRenderer`;
+
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "robot.glb" },
+      });
+    });
+    mock.resolve("robot.glb", createMockGltf("robot"));
+    await tick();
+    frame();
+
+    expect(slots.get(sk)?.status).toBe("active");
+    expect(binding.has(entity)).toBe(true);
+
+    frame(() => {
+      const mr = world.getMut(entity, "ModelRenderer" as any) as any;
+      mr.asset = { kind: "asset", type: "texture", uri: "diffuse.png" };
+    });
+
+    expect(slots.get(sk)?.status).toBe("failed");
+    expect(binding.has(entity)).toBe(false);
+    warnSpy.mockRestore();
+  });
+
+  // ---- 46. Non-ModelRenderer asset slots must not be resolved as glTF models ----
+  it("model resolver ignores ready slots that do not belong to ModelRenderer", async () => {
+    const AudioAsset = defineSchema(
+      s.object({
+        asset: assetRefSchema,
+      }),
+    );
+    const registry = {
+      ...renderingRegistry,
+      AudioAsset,
+    } as const;
+
+    const world = createWorld(registry, {
+      resources: renderingResources,
+    });
+    const binding = new ThreeBinding(world as any);
+    const scene = binding.scene;
+    const assetManager = new AssetManager();
+    const slots = new Map<string, SlotEntry>();
+
+    const glbLoader: AssetLoader<unknown> = {
+      load: vi.fn(() => new Promise(() => {})),
+      dispose: vi.fn(),
+    };
+    const audioLoader: AssetLoader<unknown> = {
+      load: vi.fn(() => Promise.resolve({ bytes: new Uint8Array([1, 2, 3]) })),
+      dispose: vi.fn(),
+    };
+
+    assetManager.registerLoader("glb", glbLoader);
+    assetManager.registerLoader("audioClip", audioLoader);
+
+    const lightSync = createLightSyncSystem(scene);
+    const assetRequest = createAssetRequestSystem(assetManager, slots, registry as any);
+    const modelResolve = createModelResolveSystem(assetManager, binding, slots);
+    const renderSync = createRenderSyncSystem(binding as any);
+    const transformSync = createTransformSyncSystem(binding as any);
+
+    function frame(fn?: () => void) {
+      world.beginFrame();
+      fn?.();
+
+      const cmds1 = new CommandBuffer(world as any);
+      lightSync(world as any, 0, cmds1 as any);
+      cmds1.flush();
+
+      const cmds2 = new CommandBuffer(world as any);
+      assetRequest(world as any, 0, cmds2 as any);
+      cmds2.flush();
+
+      const cmds3 = new CommandBuffer(world as any);
+      modelResolve(world as any, 0, cmds3 as any);
+      cmds3.flush();
+
+      const cmds4 = new CommandBuffer(world as any);
+      renderSync(world as any, 0, cmds4 as any);
+      cmds4.flush();
+
+      const cmds5 = new CommandBuffer(world as any);
+      transformSync(world as any, 0, cmds5 as any);
+      cmds5.flush();
+
+      world.endFrame();
+    }
+
+    const entity = world.createEntity();
+    frame(() => {
+      world.setComponent(entity, "ModelRenderer" as any, {
+        asset: { kind: "asset", type: "glb", uri: "robot.glb" },
+      });
+      world.setComponent(entity, "AudioAsset" as any, {
+        asset: { kind: "asset", type: "audioClip", uri: "theme.ogg" },
+      });
+    });
+
+    await tick();
+
+    expect(() => frame()).not.toThrow();
   });
 });

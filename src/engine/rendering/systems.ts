@@ -87,6 +87,31 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
       binding.delete(entity);
     }
 
+    // 2b. ModelRenderer removed — re-create mesh for surviving MeshRenderer
+    for (const entity of world.getRemoved("ModelRenderer" as any)) {
+      if (!world.hasComponent(entity, "MeshRenderer" as any)) continue;
+      if (binding.has(entity)) continue;
+      const mr = world.getComponent(entity, "MeshRenderer" as any) as any;
+      if (!mr) continue;
+
+      const geometry = createGeometry(mr.geometry);
+      const material = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(mr.color[0], mr.color[1], mr.color[2]),
+        opacity: mr.color[3],
+        transparent: mr.color[3] < 1,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.userData.entityId = entity;
+
+      const transform = world.getComponent(entity, "Transform3D" as any) as any;
+      if (transform) {
+        applyTransform(mesh, transform);
+      }
+
+      binding.set(entity, mesh);
+      binding.scene.add(mesh);
+    }
+
     // 3. Updated MeshRenderer — update material/geometry
     for (const entity of world.getUpdated("MeshRenderer" as any)) {
       const obj = binding.get(entity);
@@ -326,6 +351,7 @@ export function createAssetRequestSystem(
       if (existing.key !== "") {
         assetManager.release(existing.key);
       }
+      const wasActive = existing.status === "active";
       if (!assetManager.hasLoader(ref.type)) {
         console.warn(
           `No loader registered for asset type "${ref.type}" (entity ${entity}, component ${componentType})`,
@@ -337,10 +363,9 @@ export function createAssetRequestSystem(
         existing.sub = ref.sub;
         existing.status = "failed";
         existing.version++;
-        existing.clearOnPending = false;
+        existing.clearOnPending = wasActive;
         return;
       }
-      const wasActive = existing.status === "active";
       const entry = assetManager.request(ref.type, ref.uri, ref.options);
       existing.key = newCacheKey;
       existing.type = ref.type;
@@ -584,6 +609,7 @@ export function createModelResolveSystem(
       for (const [sk, slot] of slots) {
         if (slot.status !== "pending") continue;
         if (!justReady.has(slot.key)) continue;
+        if (!sk.endsWith(":ModelRenderer")) continue;
         const entityId = parseInt(sk.split(":")[0], 10);
         if (!world.isAlive(entityId) || !world.hasComponent(entityId, "ModelRenderer" as any)) continue;
         const entry = assetManager.peek(slot.key);
@@ -597,6 +623,7 @@ export function createModelResolveSystem(
     // 5. Path B: cache hits — pending slots whose assets are already ready
     for (const [sk, slot] of slots) {
       if (slot.status !== "pending") continue;
+      if (!sk.endsWith(":ModelRenderer")) continue;
       const entityId = parseInt(sk.split(":")[0], 10);
       if (!world.isAlive(entityId) || !world.hasComponent(entityId, "ModelRenderer" as any)) continue;
       const entry = assetManager.peek(slot.key);
