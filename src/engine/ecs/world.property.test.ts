@@ -31,6 +31,7 @@ type Model = {
   added: Set<number>;
   updated: Set<number>;
   removed: Set<number>;
+  inFrame: boolean;
 };
 
 function initModel(): Model {
@@ -41,6 +42,7 @@ function initModel(): Model {
     added: new Set(),
     updated: new Set(),
     removed: new Set(),
+    inFrame: false,
   };
 }
 
@@ -293,12 +295,14 @@ describe("EcsWorld (property-based)", () => {
 
             case "beginFrame":
               world.beginFrame();
-              flushChanges(model);
+              if (model.inFrame) flushChanges(model);
+              model.inFrame = true;
               break;
 
             case "endFrame":
               world.endFrame();
               flushChanges(model);
+              model.inFrame = false;
               break;
           }
 

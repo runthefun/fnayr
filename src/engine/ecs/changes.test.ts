@@ -31,12 +31,32 @@ describe("EcsWorld change tracking", () => {
   it("tracks updated component data", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
+    world.beginFrame();
     world.setComponent(entity, "Transform", { x: 2 });
+    world.endFrame();
 
     world.beginFrame();
     world.setComponent(entity, "Transform", { x: 3 });
 
     expect(world.getUpdated("Transform")).toEqual(new Set([entity]));
+  });
+
+  it("preserves changes made between frames (e.g. editor UI updates)", () => {
+    const world = createWorld(registry);
+    const entity = world.createEntity();
+
+    // Frame 1: add the component
+    world.beginFrame();
+    world.setComponent(entity, "Transform", { x: 1 });
+    world.endFrame();
+
+    // Between frames: simulate an editor/inspector updating the component
+    world.setComponent(entity, "Transform", { x: 42 });
+
+    // Frame 2: the update should be visible to systems
+    world.beginFrame();
+    expect(world.getUpdated("Transform")).toEqual(new Set([entity]));
+    world.endFrame();
   });
 
   it("clears changes between frames", () => {

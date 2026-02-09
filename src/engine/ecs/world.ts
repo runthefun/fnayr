@@ -22,6 +22,8 @@ import { getDefault } from "../schema";
 const hasOwn = (value: object, key: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(value, key);
 
+const emptySet: ReadonlySet<number> = new Set<number>();
+
 /**
  * Internal cached query implementation that incrementally tracks matched entities.
  */
@@ -171,6 +173,11 @@ export class EcsWorld<
     ComponentType<R>,
     { added: Set<number>; removed: Set<number>; updated: Set<number> }
   >();
+  private readonly pendingChanges = new Map<
+    ComponentType<R>,
+    { added: Set<number>; removed: Set<number>; updated: Set<number> }
+  >();
+  private inFrame = false;
   private readonly resources = new Map<string, unknown>();
   private readonly cachedQueries: CachedQueryImpl<R, readonly ComponentType<R>[]>[] = [];
   private readonly eventBus: EventBus<E> | undefined;
@@ -473,11 +480,14 @@ export class EcsWorld<
   }
 
   /**
-   * Clears tracked changes at the start of a frame.
-   * Also clears event buffers from the previous frame.
+   * Clears tracked changes from the previous frame, then merges any
+   * changes that were recorded between frames (e.g. from editor UI)
+   * so they are visible to systems in this frame.
    */
   beginFrame(): void {
     this.flushChanges();
+    this.mergePendingChanges();
+    this.inFrame = true;
     this.eventBus?.flush();
   }
 
@@ -486,6 +496,8 @@ export class EcsWorld<
    */
   endFrame(): void {
     this.flushChanges();
+    this.flushPendingChanges();
+    this.inFrame = false;
   }
 
   /**
@@ -499,28 +511,39 @@ export class EcsWorld<
     }
   }
 
+  private flushPendingChanges(): void {
+    for (const changeSet of this.pendingChanges.values()) {
+      changeSet.added.clear();
+      changeSet.removed.clear();
+      changeSet.updated.clear();
+    }
+  }
+
   /**
-   * Returns entities that added the component during the current frame.
+   * Returns entities that added the component during the current frame,
+   * including any pending between-frame changes.
    */
   getAdded<K extends ComponentType<R>>(type: K): ReadonlySet<number> {
     this.assertRegistered(type);
-    return this.getChangeSet(type).added;
+    return this.mergedChangeField(type, "added");
   }
 
   /**
-   * Returns entities that removed the component during the current frame.
+   * Returns entities that removed the component during the current frame,
+   * including any pending between-frame changes.
    */
   getRemoved<K extends ComponentType<R>>(type: K): ReadonlySet<number> {
     this.assertRegistered(type);
-    return this.getChangeSet(type).removed;
+    return this.mergedChangeField(type, "removed");
   }
 
   /**
-   * Returns entities that updated the component during the current frame.
+   * Returns entities that updated the component during the current frame,
+   * including any pending between-frame changes.
    */
   getUpdated<K extends ComponentType<R>>(type: K): ReadonlySet<number> {
     this.assertRegistered(type);
-    return this.getChangeSet(type).updated;
+    return this.mergedChangeField(type, "updated");
   }
 
   /**
@@ -701,6 +724,26 @@ export class EcsWorld<
     }
   }
 
+  /**
+   * Returns the union of a change field from both `changes` and
+   * `pendingChanges`. If one side is empty, returns the other directly
+   * to avoid allocation.
+   */
+  private mergedChangeField(
+    type: ComponentType<R>,
+    field: "added" | "removed" | "updated",
+  ): ReadonlySet<number> {
+    const main = this.changes.get(type)?.[field];
+    const pending = this.pendingChanges.get(type)?.[field];
+    const mainSize = main?.size ?? 0;
+    const pendingSize = pending?.size ?? 0;
+    if (pendingSize === 0) return main ?? emptySet;
+    if (mainSize === 0) return pending!;
+    const merged = new Set(main);
+    for (const entity of pending!) merged.add(entity);
+    return merged;
+  }
+
   private getChangeSet(type: ComponentType<R>): {
     added: Set<number>;
     removed: Set<number>;
@@ -718,15 +761,55 @@ export class EcsWorld<
     return changeSet;
   }
 
+  /**
+   * Returns the change set to record into: `pendingChanges` when between
+   * frames, `changes` when inside a frame.
+   */
+  private getRecordChangeSet(type: ComponentType<R>): {
+    added: Set<number>;
+    removed: Set<number>;
+    updated: Set<number>;
+  } {
+    const map = this.inFrame ? this.changes : this.pendingChanges;
+    let changeSet = map.get(type);
+    if (!changeSet) {
+      changeSet = {
+        added: new Set<number>(),
+        removed: new Set<number>(),
+        updated: new Set<number>(),
+      };
+      map.set(type, changeSet);
+    }
+    return changeSet;
+  }
+
+  /**
+   * Merges pending (between-frame) changes into the active change sets,
+   * then clears the pending buffer.
+   */
+  private mergePendingChanges(): void {
+    for (const [type, pending] of this.pendingChanges) {
+      const target = this.getChangeSet(type);
+      for (const entity of pending.added) target.added.add(entity);
+      for (const entity of pending.removed) target.removed.add(entity);
+      for (const entity of pending.updated) target.updated.add(entity);
+    }
+    for (const changeSet of this.pendingChanges.values()) {
+      changeSet.added.clear();
+      changeSet.removed.clear();
+      changeSet.updated.clear();
+    }
+  }
+
   private recordAdded(type: ComponentType<R>, entity: number): void {
-    const changeSet = this.getChangeSet(type);
+    const changeSet = this.getRecordChangeSet(type);
     changeSet.removed.delete(entity);
     changeSet.updated.delete(entity);
     changeSet.added.add(entity);
   }
 
   private recordRemoved(type: ComponentType<R>, entity: number): void {
-    const changeSet = this.getChangeSet(type);
+    const changeSet = this.getRecordChangeSet(type);
     if (changeSet.added.delete(entity)) {
       changeSet.updated.delete(entity);
       return;
@@ -736,7 +819,7 @@ export class EcsWorld<
   }
 
   private recordUpdated(type: ComponentType<R>, entity: number): void {
-    const changeSet = this.getChangeSet(type);
+    const changeSet = this.getRecordChangeSet(type);
     if (changeSet.added.has(entity)) {
       return;
     }

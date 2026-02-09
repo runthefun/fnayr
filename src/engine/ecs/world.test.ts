@@ -183,9 +183,11 @@ describe("EcsWorld", () => {
   it("getMut marks the component as updated in change tracking", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
-    world.setComponent(entity, "Transform", { x: 1 });
     world.beginFrame();
+    world.setComponent(entity, "Transform", { x: 1 });
+    world.endFrame();
 
+    world.beginFrame();
     world.getMut(entity, "Transform");
 
     expect(world.getUpdated("Transform")).toContain(entity);
@@ -481,7 +483,10 @@ describe("change tracking returns ReadonlySet", () => {
   it("getRemoved returns a Set containing the removed entity", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
+    world.beginFrame();
     world.setComponent(entity, "Transform", { x: 1 });
+    world.endFrame();
+
     world.beginFrame();
     world.removeComponent(entity, "Transform");
 
@@ -494,7 +499,10 @@ describe("change tracking returns ReadonlySet", () => {
   it("getUpdated returns a Set containing the updated entity", () => {
     const world = createWorld(registry);
     const entity = world.createEntity();
+    world.beginFrame();
     world.setComponent(entity, "Transform", { x: 1 });
+    world.endFrame();
+
     world.beginFrame();
     world.setComponent(entity, "Transform", { x: 2 });
 
