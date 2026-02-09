@@ -7,7 +7,9 @@ import { renderingRegistry, renderingResources } from "./components";
 import { ThreeBinding } from "./binding";
 import {
   createAssetRequestSystem,
-  createModelResolveSystem,
+  createAssetResolveSystem,
+  AssetResolver,
+  createModelHandler,
   createRenderSyncSystem,
   createTransformSyncSystem,
 } from "./systems";
@@ -92,9 +94,11 @@ function setup() {
 
   assetManager.registerLoader(GLB_TYPE, mock.loader);
 
-  const lightSync = createLightSyncSystem(scene);
+  const lightSync = createLightSyncSystem(scene, binding);
   const assetRequest = createAssetRequestSystem(assetManager, slots, renderingRegistry);
-  const modelResolve = createModelResolveSystem(assetManager, binding, slots);
+  const resolver = new AssetResolver();
+  resolver.register(createModelHandler() as any);
+  const modelResolve = createAssetResolveSystem(assetManager, binding as any, slots, resolver as any);
   const renderSync = createRenderSyncSystem(binding);
   const transformSync = createTransformSyncSystem(binding);
 

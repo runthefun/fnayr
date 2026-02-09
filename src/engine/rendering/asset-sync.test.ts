@@ -10,7 +10,9 @@ import {
   createRenderSyncSystem,
   createTransformSyncSystem,
   createAssetRequestSystem,
-  createModelResolveSystem,
+  createAssetResolveSystem,
+  AssetResolver,
+  createModelHandler,
 } from "./systems";
 import type { SlotEntry } from "./systems";
 import { createLightSyncSystem } from "./lights";
@@ -122,13 +124,15 @@ function setup() {
   const mock = createMockLoader();
   assetManager.registerLoader("glb", mock.loader);
 
-  const lightSync = createLightSyncSystem(scene);
+  const lightSync = createLightSyncSystem(scene, binding);
   const assetRequest = createAssetRequestSystem(
     assetManager,
     slots,
     renderingRegistry
   );
-  const modelResolve = createModelResolveSystem(assetManager, binding, slots);
+  const resolver = new AssetResolver();
+  resolver.register(createModelHandler() as any);
+  const modelResolve = createAssetResolveSystem(assetManager, binding as any, slots, resolver as any);
   const renderSync = createRenderSyncSystem(binding);
   const transformSync = createTransformSyncSystem(binding);
 
@@ -192,22 +196,24 @@ describe("Asset sync", () => {
       });
     });
 
-    // Slot is pending, nothing in scene from the model
+    // Slot is pending, placeholder Group exists in binding
     const sk = `${entity}:VisualRenderer`;
     expect(slots.get(sk)?.status).toBe("pending");
-    expect(binding.has(entity)).toBe(false);
+    expect(binding.has(entity)).toBe(true);
+    expect(binding.get(entity)).toBeInstanceOf(THREE.Group);
 
     // Resolve the mock loader
     mock.resolve("robot.glb", createMockGltf("robot"));
     await tick();
 
-    // Run another frame → binding has entity, scene has the clone
+    // Run another frame → model clone replaces placeholder
     frame();
 
     expect(slots.get(sk)?.status).toBe("active");
     expect(binding.has(entity)).toBe(true);
     const obj = binding.get(entity)!;
     expect(obj).toBeInstanceOf(THREE.Group);
+    expect(obj.name).toBe("robot");
     expect(scene.children).toContain(obj);
   });
 
@@ -493,7 +499,9 @@ describe("Asset sync", () => {
 
     const sk = `${entity}:VisualRenderer`;
     expect(slots.has(sk)).toBe(false);
-    expect(binding.has(entity)).toBe(false);
+    // Placeholder Group still created by renderSync for model variant
+    expect(binding.has(entity)).toBe(true);
+    expect(binding.get(entity)).toBeInstanceOf(THREE.Group);
   });
 
   // ---- 11. Empty URI on add then non-empty URI on update ----
@@ -672,21 +680,23 @@ describe("Asset sync", () => {
       });
     });
 
-    // Mesh should be removed on variant switch
-    expect(binding.has(entity)).toBe(false);
+    // Mesh replaced with placeholder Group on variant switch
+    expect(binding.has(entity)).toBe(true);
+    expect(binding.get(entity)).toBeInstanceOf(THREE.Group);
 
     mock.resolve("robot.glb", createMockGltf("robot"));
     await tick();
     frame();
 
-    // After model resolves, binding should have the model (Group)
+    // After model resolves, binding should have the named model clone (Group)
     expect(binding.has(entity)).toBe(true);
     const obj = binding.get(entity)!;
     expect(obj).toBeInstanceOf(THREE.Group);
+    expect(obj.name).toBe("robot");
   });
 
-  // ---- 17. Setting model variant in same frame as add: no mesh created ----
-  it("setting model variant on add does not create a mesh", () => {
+  // ---- 17. Setting model variant on add creates placeholder Group, not a mesh ----
+  it("setting model variant on add creates placeholder Group, not a mesh", () => {
     const { world, binding, frame } = setup();
     const entity = world.createEntity();
 
@@ -697,22 +707,24 @@ describe("Asset sync", () => {
       });
     });
 
-    // model variant: renderSync skips, so no binding yet
+    // model variant: renderSync creates a placeholder Group (not a Mesh)
     const obj = binding.get(entity);
-    expect(obj).toBeUndefined();
+    expect(obj).toBeInstanceOf(THREE.Group);
+    expect(obj).not.toBeInstanceOf(THREE.Mesh);
   });
 
-  // ---- 18. Entity with light + model: both coexist ----
-  it("entity with light + model: both coexist", async () => {
+  // ---- 18. Light entity + model entity coexist in scene ----
+  it("light entity + model entity coexist in scene", async () => {
     const { world, binding, scene, mock, frame } = setup();
-    const entity = world.createEntity();
+    const lightEntity = world.createEntity();
+    const modelEntity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "DirectionalLight" as any, {
+      world.setComponent(lightEntity, "DirectionalLight" as any, {
         color: [1, 1, 1, 1],
         intensity: 1,
       });
-      world.setComponent(entity, "VisualRenderer" as any, {
+      world.setComponent(modelEntity, "VisualRenderer" as any, {
         kind: "model",
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
@@ -723,11 +735,13 @@ describe("Asset sync", () => {
     frame();
 
     // Model in binding
-    expect(binding.has(entity)).toBe(true);
-    const obj = binding.get(entity)!;
+    expect(binding.has(modelEntity)).toBe(true);
+    const obj = binding.get(modelEntity)!;
     expect(obj).toBeInstanceOf(THREE.Group);
 
-    // Light in scene (via light map, not binding)
+    // Light in scene and binding
+    expect(binding.has(lightEntity)).toBe(true);
+    expect(binding.get(lightEntity)).toBeInstanceOf(THREE.DirectionalLight);
     const lights = scene.children.filter(
       (c) => c instanceof THREE.DirectionalLight
     );
@@ -1770,9 +1784,11 @@ describe("Asset sync", () => {
     assetManager.registerLoader("glb", glbLoader);
     assetManager.registerLoader("audioClip", audioLoader);
 
-    const lightSync = createLightSyncSystem(scene);
+    const lightSync = createLightSyncSystem(scene, binding);
     const assetRequest = createAssetRequestSystem(assetManager, slots, registry as any);
-    const modelResolve = createModelResolveSystem(assetManager, binding, slots);
+    const resolver2 = new AssetResolver();
+    resolver2.register(createModelHandler() as any);
+    const modelResolve = createAssetResolveSystem(assetManager, binding as any, slots, resolver2 as any);
     const renderSync = createRenderSyncSystem(binding as any);
     const transformSync = createTransformSyncSystem(binding as any);
 

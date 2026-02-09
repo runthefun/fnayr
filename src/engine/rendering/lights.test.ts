@@ -15,7 +15,7 @@ function setup() {
   const scene = new THREE.Scene();
   const binding = new ThreeBinding(world, scene);
   const commands = new CommandBuffer(world);
-  const lightSync = createLightSyncSystem(scene);
+  const lightSync = createLightSyncSystem(scene, binding);
   const transformSync = createTransformSyncSystem(binding);
   return { world, scene, binding, commands, lightSync, transformSync };
 }
@@ -427,7 +427,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xff0000,
+        color: [1, 0, 0, 1],
         intensity: 2,
         distance: 15,
         angle: Math.PI / 4,
@@ -454,7 +454,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -491,7 +491,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -517,7 +517,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -542,7 +542,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -565,7 +565,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -597,7 +597,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,

@@ -4,7 +4,7 @@ import { createWorld } from "../ecs/world";
 import { CommandBuffer } from "../ecs/commands";
 import { renderingRegistry } from "./components";
 import { ThreeBinding } from "./binding";
-import { createRenderSyncSystem, createTransformSyncSystem, createTextureResolveSystem } from "./systems";
+import { createRenderSyncSystem, createTransformSyncSystem, createAssetResolveSystem, AssetResolver, createTextureHandler } from "./systems";
 import { AssetManager } from "../assets/manager";
 
 describe("Rendering bridge", () => {
@@ -15,7 +15,9 @@ describe("Rendering bridge", () => {
     const transformSync = createTransformSyncSystem(binding);
     const assetManager = new AssetManager();
     const slots = new Map();
-    const textureResolveSync = createTextureResolveSystem(assetManager, binding, slots);
+    const resolver = new AssetResolver();
+    resolver.register(createTextureHandler() as any);
+    const textureResolveSync = createAssetResolveSystem(assetManager, binding as any, slots, resolver as any);
 
     /** Begin a frame, run a setup callback, then execute sync systems, then end the frame. */
     function frame(fn?: () => void) {

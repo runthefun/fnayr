@@ -118,7 +118,7 @@ export const PointLight = defineSchema(
 
 export const SpotLight = defineSchema(
   s.object({
-    color: s.number({ integer: true, default: 0xffffff }),
+    color: colorTuple,
     intensity: s.number({ default: 1 }),
     distance: s.number({ default: 0 }),
     angle: s.number({ default: Math.PI / 3 }),

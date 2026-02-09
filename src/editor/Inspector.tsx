@@ -1,5 +1,5 @@
-import { type ChangeEvent } from "react";
-import { X } from "lucide-react";
+import { type ChangeEvent, useState } from "react";
+import { X, ChevronRight, ChevronDown } from "lucide-react";
 import { useEditor, useSelectedEntity } from "./useEditor";
 import { SchemaField } from "./fields/SchemaField";
 import { getDefault } from "../engine/schema";
@@ -11,6 +11,13 @@ type ComponentKey = keyof typeof renderingRegistry;
 export function Inspector() {
   const { world } = useEditor();
   const selectedEntity = useSelectedEntity();
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const key of Object.keys(world.registry)) {
+      if (key !== "Transform3D") initial[key] = true;
+    }
+    return initial;
+  });
 
   if (selectedEntity === null) {
     return (
@@ -70,25 +77,42 @@ export function Inspector() {
 
         return (
           <div key={type} className="border-b border-subtle">
-            <div className="px-2 py-1.5 bg-surface text-primary font-medium text-[11px] flex items-center justify-between">
-              <span>{type}</span>
+            <div
+              className="px-2 py-1.5 bg-surface text-primary font-medium text-[11px] flex items-center justify-between cursor-pointer select-none"
+              onClick={() =>
+                setCollapsed((prev) => ({ ...prev, [type]: !prev[type] }))
+              }
+            >
+              <span className="flex items-center gap-1">
+                {collapsed[type] ? (
+                  <ChevronRight size={12} />
+                ) : (
+                  <ChevronDown size={12} />
+                )}
+                {type}
+              </span>
               <button
-                onClick={() => handleRemoveComponent(type)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveComponent(type);
+                }}
                 className="text-muted hover:text-primary text-[10px] cursor-pointer"
                 title={`Remove ${type}`}
               >
                 <X size={12} />
               </button>
             </div>
-            <div className="px-2 py-1.5">
-              <SchemaField
-                value={data}
-                schema={schema}
-                onChange={(newValue) => {
-                  world.setComponent(selectedEntity, type, newValue as never);
-                }}
-              />
-            </div>
+            {!collapsed[type] && (
+              <div className="px-2 py-1.5">
+                <SchemaField
+                  value={data}
+                  schema={schema}
+                  onChange={(newValue) => {
+                    world.setComponent(selectedEntity, type, newValue as never);
+                  }}
+                />
+              </div>
+            )}
           </div>
         );
       })}

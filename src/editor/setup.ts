@@ -54,10 +54,10 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
 
   const renderSync = createRenderSyncSystem(binding);
   const assetRequestSync = createAssetRequestSystem(assetManager, slots, renderingRegistry);
-  const assetResolver = new AssetResolver();
-  assetResolver.register(createModelHandler());
-  assetResolver.register(createTextureHandler());
-  const assetResolveSync = createAssetResolveSystem(assetManager, binding, slots, assetResolver);
+  const assetResolver = new AssetResolver<Registry, ThreeBinding<Registry>>();
+  assetResolver.register(createModelHandler() as any);
+  assetResolver.register(createTextureHandler() as any);
+  const assetResolveSync = createAssetResolveSystem(assetManager, binding as any, slots, assetResolver as any);
   const lightSync = createLightSyncSystem(binding.scene, binding);
   const backgroundSync = createBackgroundSyncSystem(binding.scene);
   const transformSync = createTransformSyncSystem(binding, {
@@ -158,6 +158,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     const dt = (now - prevTime) / 1000;
     prevTime = now;
 
+    world.beginFrame();
     controls.update(dt);
     renderSync(world, 0, commands);
     assetRequestSync(world as any, 0, commands as any);
@@ -167,7 +168,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     transformSync(world, 0, commands);
     commands.flush();
     gizmo.tick();
-    world.flushChanges();
+    world.endFrame();
     renderer.render(binding.scene, camera);
     rafId = requestAnimationFrame(loop);
   }
