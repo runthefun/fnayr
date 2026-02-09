@@ -7,6 +7,7 @@ import type { ThreeBinding } from "./binding";
 import type { renderingRegistry, renderingResources } from "./components";
 import { AssetManager } from "../assets/manager";
 import type { SchemaLike } from "../schema";
+import type { TextureAsset } from "./loaders/texture-loader";
 
 type RenderRegistry = typeof renderingRegistry & ComponentRegistry;
 type RenderResources = typeof renderingResources;
@@ -679,6 +680,65 @@ export function createModelResolveSystem(
         if (slot.status !== "pending") continue;
         if (justFailed.has(slot.key)) {
           slot.status = "failed";
+        }
+      }
+    }
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  createTextureResolveSystem                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Resolves MeshMaterial texture assets and applies them to existing
+ * mesh objects in the binding. Uses peek() instead of drainReady()
+ * to avoid conflicts with modelResolveSystem.
+ */
+export function createTextureResolveSystem(
+  assetManager: AssetManager,
+  binding: ThreeBinding<RenderRegistry>,
+  slots: Map<string, SlotEntry>,
+): System<RenderRegistry> {
+  return (world: World<RenderRegistry>, _dt: number, _commands: Commands<RenderRegistry>) => {
+    for (const [sk, slot] of slots) {
+      if (!sk.endsWith(":MeshMaterial")) continue;
+
+      const entityId = parseInt(sk.split(":")[0], 10);
+      if (!world.isAlive(entityId)) continue;
+
+      // Handle pending → check if ready via peek
+      if (slot.status === "pending") {
+        if (slot.key === "") continue;
+        const entry = assetManager.peek(slot.key);
+        if (!entry) continue;
+
+        if (entry.status === "ready") {
+          const obj = binding.get(entityId);
+          if (obj && obj instanceof THREE.Mesh) {
+            const textureAsset = entry.asset as TextureAsset;
+            const texture = textureAsset.texture.clone();
+            const mat = obj.material as THREE.MeshStandardMaterial;
+            if (mat.map) mat.map.dispose();
+            mat.map = texture;
+            mat.needsUpdate = true;
+          }
+          slot.status = "active";
+        } else if (entry.status === "error") {
+          slot.status = "failed";
+        }
+      }
+    }
+
+    // Handle removed MeshMaterial — clear texture from mesh
+    for (const entity of world.getRemoved("MeshMaterial" as any)) {
+      const obj = binding.get(entity);
+      if (obj && obj instanceof THREE.Mesh) {
+        const mat = obj.material as THREE.MeshStandardMaterial;
+        if (mat.map) {
+          mat.map.dispose();
+          mat.map = null;
+          mat.needsUpdate = true;
         }
       }
     }
