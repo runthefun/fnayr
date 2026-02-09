@@ -140,10 +140,9 @@ const COLORS: [number, number, number, number][] = [
 const colorCycleSystem = (w: World<Registry>) => {
   if (!input.isKeyJustPressed("Space")) return;
   colorIndex = (colorIndex + 1) % COLORS.length;
-  for (const { entity, components } of w.query(["Spin", "VisualRenderer"])) {
-    if (components.VisualRenderer.kind !== "mesh") continue;
-    const mr = w.getMut(entity, "VisualRenderer")! as any;
-    mr.color = COLORS[colorIndex];
+  for (const { entity } of w.query(["Spin", "MeshMaterial"])) {
+    const mat = w.getMut(entity, "MeshMaterial")! as any;
+    mat.color = COLORS[colorIndex];
   }
 };
 
@@ -169,6 +168,9 @@ world.setComponent(box, "Transform3D", {
 world.setComponent(box, "VisualRenderer", {
   kind: "mesh",
   geometry: "box",
+});
+world.setComponent(box, "MeshMaterial", {
+  texture: { kind: "asset", type: "texture", uri: "" },
   color: [0.9, 0.15, 0.15, 1],
 });
 world.setComponent(box, "Spin", { speed: 1 });
@@ -183,6 +185,9 @@ world.setComponent(ground, "Transform3D", {
 world.setComponent(ground, "VisualRenderer", {
   kind: "mesh",
   geometry: "plane",
+});
+world.setComponent(ground, "MeshMaterial", {
+  texture: { kind: "asset", type: "texture", uri: "" },
   color: [0.2, 0.7, 0.2, 1],
 });
 

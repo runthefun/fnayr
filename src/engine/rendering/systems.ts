@@ -18,7 +18,6 @@ type Transform3DData = { position: number[]; rotation: number[]; scale: number[]
 type MeshData = {
   kind: "mesh";
   geometry: "box" | "sphere" | "plane";
-  color: [number, number, number, number];
 };
 
 type ModelData = {
@@ -68,6 +67,11 @@ export function applyTransform(
   obj.scale.set(data.scale[0], data.scale[1], data.scale[2]);
 }
 
+type MeshMaterialData = {
+  texture: { type: string; uri: string; sub?: string; options?: Record<string, unknown> };
+  color: [number, number, number, number];
+};
+
 function createMeshObject<R extends RenderRegistry>(
   mr: MeshData,
   entity: number,
@@ -75,10 +79,13 @@ function createMeshObject<R extends RenderRegistry>(
   binding: ThreeBinding<R>,
 ): void {
   const geometry = createGeometry(mr.geometry);
+  // Read color from MeshMaterial component if present, else default gray
+  const meshMat = world.getComponent(entity, "MeshMaterial" as ComponentType<R>) as MeshMaterialData | undefined;
+  const color = meshMat?.color ?? [0.8, 0.8, 0.8, 1.0];
   const material = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(mr.color[0], mr.color[1], mr.color[2]),
-    opacity: mr.color[3],
-    transparent: mr.color[3] < 1,
+    color: new THREE.Color(color[0], color[1], color[2]),
+    opacity: color[3],
+    transparent: color[3] < 1,
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.userData.entityId = entity;
@@ -128,14 +135,6 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
           binding.delete(entity);
           createMeshObject(vr, entity, world, binding);
         } else {
-          // Update material color
-          const mat = obj.material as THREE.MeshStandardMaterial;
-          mat.color.setRGB(vr.color[0], vr.color[1], vr.color[2]);
-          mat.opacity = vr.color[3];
-          const wasTransparent = mat.transparent;
-          mat.transparent = vr.color[3] < 1;
-          if (mat.transparent !== wasTransparent) mat.needsUpdate = true;
-
           // Swap geometry if type changed
           const currentGeoType =
             obj.geometry instanceof THREE.BoxGeometry
@@ -730,7 +729,37 @@ export function createTextureResolveSystem(
       }
     }
 
-    // Handle removed MeshMaterial — clear texture from mesh
+    // Handle MeshMaterial added/updated — apply color to mesh material
+    for (const entity of world.getAdded("MeshMaterial" as any)) {
+      const obj = binding.get(entity);
+      if (obj && obj instanceof THREE.Mesh) {
+        const meshMat = world.getComponent(entity, "MeshMaterial" as any) as MeshMaterialData | undefined;
+        if (meshMat) {
+          const mat = obj.material as THREE.MeshStandardMaterial;
+          mat.color.setRGB(meshMat.color[0], meshMat.color[1], meshMat.color[2]);
+          mat.opacity = meshMat.color[3];
+          const wasTransparent = mat.transparent;
+          mat.transparent = meshMat.color[3] < 1;
+          if (mat.transparent !== wasTransparent) mat.needsUpdate = true;
+        }
+      }
+    }
+    for (const entity of world.getUpdated("MeshMaterial" as any)) {
+      const obj = binding.get(entity);
+      if (obj && obj instanceof THREE.Mesh) {
+        const meshMat = world.getComponent(entity, "MeshMaterial" as any) as MeshMaterialData | undefined;
+        if (meshMat) {
+          const mat = obj.material as THREE.MeshStandardMaterial;
+          mat.color.setRGB(meshMat.color[0], meshMat.color[1], meshMat.color[2]);
+          mat.opacity = meshMat.color[3];
+          const wasTransparent = mat.transparent;
+          mat.transparent = meshMat.color[3] < 1;
+          if (mat.transparent !== wasTransparent) mat.needsUpdate = true;
+        }
+      }
+    }
+
+    // Handle removed MeshMaterial — clear texture from mesh and reset color
     for (const entity of world.getRemoved("MeshMaterial" as any)) {
       const obj = binding.get(entity);
       if (obj && obj instanceof THREE.Mesh) {
@@ -738,8 +767,12 @@ export function createTextureResolveSystem(
         if (mat.map) {
           mat.map.dispose();
           mat.map = null;
-          mat.needsUpdate = true;
         }
+        // Reset color to default gray
+        mat.color.setRGB(0.8, 0.8, 0.8);
+        mat.opacity = 1.0;
+        mat.transparent = false;
+        mat.needsUpdate = true;
       }
     }
   };

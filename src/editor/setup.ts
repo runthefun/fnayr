@@ -77,6 +77,9 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   world.setComponent(box, "VisualRenderer", {
     kind: "mesh",
     geometry: "box",
+  });
+  world.setComponent(box, "MeshMaterial", {
+    texture: { kind: "asset", type: "texture", uri: "" },
     color: [0.9, 0.15, 0.15, 1],
   });
 
@@ -89,6 +92,9 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   world.setComponent(ground, "VisualRenderer", {
     kind: "mesh",
     geometry: "plane",
+  });
+  world.setComponent(ground, "MeshMaterial", {
+    texture: { kind: "asset", type: "texture", uri: "" },
     color: [0.2, 0.7, 0.2, 1],
   });
 

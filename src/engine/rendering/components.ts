@@ -58,7 +58,6 @@ export const VisualRenderer = defineSchema(
     mesh: s.object({
       kind: s.literal("mesh"),
       geometry: s.enum(["box", "sphere", "plane"] as const, { default: "box" }),
-      color: colorTuple,
     }),
     model: s.object({
       kind: s.literal("model"),
@@ -130,6 +129,7 @@ export const LoadingState = defineSchema(
 export const MeshMaterial = defineSchema(
   s.object({
     texture: assetRef("texture", { hidden: ["sub", "options"] }),
+    color: colorTuple,
   })
 );
 

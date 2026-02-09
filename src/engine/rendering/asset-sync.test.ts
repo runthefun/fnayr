@@ -659,7 +659,6 @@ describe("Asset sync", () => {
       world.setComponent(entity, "VisualRenderer" as any, {
         kind: "mesh",
         geometry: "box",
-        color: [1, 0, 0, 1],
       });
     });
 
@@ -915,7 +914,6 @@ describe("Asset sync", () => {
       world.setComponent(entity, "VisualRenderer" as any, {
         kind: "mesh",
         geometry: "box",
-        color: [1, 0, 0, 1],
       });
     });
     expect(binding.get(entity)).toBeInstanceOf(THREE.Mesh);
@@ -1132,7 +1130,6 @@ describe("Asset sync", () => {
       world.setComponent(entity, "VisualRenderer" as any, {
         kind: "mesh",
         geometry: "box",
-        color: [1, 0, 0, 1],
       });
     });
 
@@ -1707,7 +1704,6 @@ describe("Asset sync", () => {
       world.setComponent(entity, "VisualRenderer" as any, {
         kind: "mesh",
         geometry: "box",
-        color: [1, 0, 0, 1],
       });
     });
 
