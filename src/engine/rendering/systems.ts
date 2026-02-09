@@ -609,76 +609,148 @@ function instantiateGltf(
 }
 
 /* ------------------------------------------------------------------ */
-/*  createModelResolveSystem                                          */
+/*  AssetResolver & createAssetResolveSystem                          */
 /* ------------------------------------------------------------------ */
 
-export function createModelResolveSystem(
+export type AssetReadyHandler = (
+  entity: number,
+  asset: unknown,
+  slot: SlotEntry,
+  world: World<RenderRegistry>,
+  binding: ThreeBinding<RenderRegistry>,
+) => void;
+
+export type AssetClearHandler = (
+  entity: number,
+  world: World<RenderRegistry>,
+  binding: ThreeBinding<RenderRegistry>,
+) => void;
+
+export type ComponentSyncHandler = (
+  entity: number,
+  world: World<RenderRegistry>,
+  binding: ThreeBinding<RenderRegistry>,
+) => void;
+
+export interface AssetTypeHandler {
+  componentType: string;
+  onReady: AssetReadyHandler;
+  onClear?: AssetClearHandler;
+  onAdded?: ComponentSyncHandler;
+  onUpdated?: ComponentSyncHandler;
+  onRemoved?: ComponentSyncHandler;
+  filter?: (entity: number, world: World<RenderRegistry>) => boolean;
+}
+
+export class AssetResolver {
+  private handlers: AssetTypeHandler[] = [];
+
+  register(handler: AssetTypeHandler): void {
+    this.handlers.push(handler);
+  }
+
+  getHandlers(): ReadonlyArray<AssetTypeHandler> {
+    return this.handlers;
+  }
+
+  getHandlersForComponent(componentType: string): AssetTypeHandler[] {
+    return this.handlers.filter((h) => h.componentType === componentType);
+  }
+}
+
+/**
+ * Creates a single system that replaces both createModelResolveSystem
+ * and createTextureResolveSystem. Uses peek() for all resolution.
+ */
+export function createAssetResolveSystem(
   assetManager: AssetManager,
   binding: ThreeBinding<RenderRegistry>,
   slots: Map<string, SlotEntry>,
+  resolver: AssetResolver,
 ): System<RenderRegistry> {
   return (world: World<RenderRegistry>, _dt: number, _commands: Commands<RenderRegistry>) => {
-    // 1. Empty-URI cleanup: updated VisualRenderer with kind=model and empty URI
-    for (const entity of world.getUpdated("VisualRenderer")) {
-      const vr = world.getComponent(entity, "VisualRenderer") as VisualRendererData | undefined;
-      if (vr && vr.kind === "model" && !vr.asset?.uri && binding.has(entity)) {
-        binding.delete(entity);
-      }
-    }
+    const handlers = resolver.getHandlers();
 
-    // 2. Pre-clear pass: slots with clearOnPending (pending or failed)
-    for (const [sk, slot] of slots) {
-      if ((slot.status === "pending" || slot.status === "failed") && slot.clearOnPending) {
-        const entityId = parseInt(sk.split(":")[0], 10);
-        if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer")) continue;
-        const vr = world.getComponent(entityId, "VisualRenderer") as VisualRendererData | undefined;
-        if (!vr || vr.kind !== "model") continue;
-        binding.delete(entityId);
-        slot.clearOnPending = false;
-      }
-    }
-
-    // 3. Path A: newly ready assets
-    const justReady = assetManager.drainReady();
-    if (justReady.size > 0) {
-      for (const [sk, slot] of slots) {
-        if (slot.status !== "pending") continue;
-        if (!justReady.has(slot.key)) continue;
-        if (!sk.endsWith(":VisualRenderer")) continue;
-        const entityId = parseInt(sk.split(":")[0], 10);
-        if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer")) continue;
-        const vr = world.getComponent(entityId, "VisualRenderer") as VisualRendererData | undefined;
-        if (!vr || vr.kind !== "model") continue;
-        const entry = assetManager.peek(slot.key);
-        if (entry && entry.status === "ready") {
-          instantiateGltf(entry.asset as GltfAsset, slot.sub, entityId, world, binding);
-          slot.status = "active";
+    // 1. Per-handler: empty-URI cleanup on updated components + clear on pending
+    for (const handler of handlers) {
+      if (handler.onClear) {
+        for (const entity of world.getUpdated(handler.componentType as any)) {
+          if (handler.filter && !handler.filter(entity, world)) continue;
+          const component = world.getComponent(entity, handler.componentType as any);
+          // Check for empty URI by looking at the slot
+          const sk = `${entity}:${handler.componentType}`;
+          const slot = slots.get(sk);
+          if (!slot && binding.has(entity)) {
+            // Component updated but no slot = variant switched away or empty URI
+            handler.onClear(entity, world, binding);
+          }
         }
       }
     }
 
-    // 4. Path B: cache hits — pending slots whose assets are already ready
+    // 2. Pre-clear pass: slots with clearOnPending
     for (const [sk, slot] of slots) {
-      if (slot.status !== "pending") continue;
-      if (!sk.endsWith(":VisualRenderer")) continue;
-      const entityId = parseInt(sk.split(":")[0], 10);
-      if (!world.isAlive(entityId) || !world.hasComponent(entityId, "VisualRenderer")) continue;
-      const vr = world.getComponent(entityId, "VisualRenderer") as VisualRendererData | undefined;
-      if (!vr || vr.kind !== "model") continue;
-      const entry = assetManager.peek(slot.key);
-      if (entry && entry.status === "ready") {
-        instantiateGltf(entry.asset as GltfAsset, slot.sub, entityId, world, binding);
-        slot.status = "active";
+      if ((slot.status === "pending" || slot.status === "failed") && slot.clearOnPending) {
+        const colonIdx = sk.indexOf(":");
+        const entityId = parseInt(sk.substring(0, colonIdx), 10);
+        const componentType = sk.substring(colonIdx + 1);
+        if (!world.isAlive(entityId) || !world.hasComponent(entityId, componentType as any)) continue;
+        const matchingHandlers = resolver.getHandlersForComponent(componentType);
+        for (const handler of matchingHandlers) {
+          if (handler.filter && !handler.filter(entityId, world)) continue;
+          if (handler.onClear) {
+            handler.onClear(entityId, world, binding);
+          }
+        }
+        slot.clearOnPending = false;
       }
     }
 
-    // 5. Path C: failed assets
-    const justFailed = assetManager.drainFailed();
-    if (justFailed.size > 0) {
-      for (const [, slot] of slots) {
-        if (slot.status !== "pending") continue;
-        if (justFailed.has(slot.key)) {
-          slot.status = "failed";
+    // 3. Resolve pending slots via peek()
+    for (const [sk, slot] of slots) {
+      if (slot.status !== "pending") continue;
+      if (slot.key === "") continue;
+
+      const colonIdx = sk.indexOf(":");
+      const entityId = parseInt(sk.substring(0, colonIdx), 10);
+      const componentType = sk.substring(colonIdx + 1);
+
+      if (!world.isAlive(entityId) || !world.hasComponent(entityId, componentType as any)) continue;
+
+      const entry = assetManager.peek(slot.key);
+      if (!entry) continue;
+
+      if (entry.status === "ready") {
+        const matchingHandlers = resolver.getHandlersForComponent(componentType);
+        let handled = false;
+        for (const handler of matchingHandlers) {
+          if (handler.filter && !handler.filter(entityId, world)) continue;
+          handler.onReady(entityId, entry.asset, slot, world, binding);
+          handled = true;
+        }
+        if (handled || matchingHandlers.length === 0) {
+          slot.status = "active";
+        }
+      } else if (entry.status === "error") {
+        slot.status = "failed";
+      }
+    }
+
+    // 4. Component sync callbacks (onAdded/onUpdated/onRemoved)
+    for (const handler of handlers) {
+      if (handler.onAdded) {
+        for (const entity of world.getAdded(handler.componentType as any)) {
+          handler.onAdded(entity, world, binding);
+        }
+      }
+      if (handler.onUpdated) {
+        for (const entity of world.getUpdated(handler.componentType as any)) {
+          handler.onUpdated(entity, world, binding);
+        }
+      }
+      if (handler.onRemoved) {
+        for (const entity of world.getRemoved(handler.componentType as any)) {
+          handler.onRemoved(entity, world, binding);
         }
       }
     }
@@ -686,51 +758,40 @@ export function createModelResolveSystem(
 }
 
 /* ------------------------------------------------------------------ */
-/*  createTextureResolveSystem                                        */
+/*  Default asset type handlers                                        */
 /* ------------------------------------------------------------------ */
 
-/**
- * Resolves MeshMaterial texture assets and applies them to existing
- * mesh objects in the binding. Uses peek() instead of drainReady()
- * to avoid conflicts with modelResolveSystem.
- */
-export function createTextureResolveSystem(
-  assetManager: AssetManager,
-  binding: ThreeBinding<RenderRegistry>,
-  slots: Map<string, SlotEntry>,
-): System<RenderRegistry> {
-  return (world: World<RenderRegistry>, _dt: number, _commands: Commands<RenderRegistry>) => {
-    for (const [sk, slot] of slots) {
-      if (!sk.endsWith(":MeshMaterial")) continue;
+export function createModelHandler(): AssetTypeHandler {
+  return {
+    componentType: "VisualRenderer",
+    filter: (entity, world) => {
+      const vr = world.getComponent(entity, "VisualRenderer") as VisualRendererData | undefined;
+      return vr?.kind === "model";
+    },
+    onReady: (entity, asset, slot, world, binding) => {
+      instantiateGltf(asset as GltfAsset, slot.sub, entity, world, binding);
+    },
+    onClear: (entity, world, binding) => {
+      binding.delete(entity);
+    },
+  };
+}
 
-      const entityId = parseInt(sk.split(":")[0], 10);
-      if (!world.isAlive(entityId)) continue;
-
-      // Handle pending → check if ready via peek
-      if (slot.status === "pending") {
-        if (slot.key === "") continue;
-        const entry = assetManager.peek(slot.key);
-        if (!entry) continue;
-
-        if (entry.status === "ready") {
-          const obj = binding.get(entityId);
-          if (obj && obj instanceof THREE.Mesh) {
-            const textureAsset = entry.asset as TextureAsset;
-            const texture = textureAsset.texture.clone();
-            const mat = obj.material as THREE.MeshStandardMaterial;
-            if (mat.map) mat.map.dispose();
-            mat.map = texture;
-            mat.needsUpdate = true;
-          }
-          slot.status = "active";
-        } else if (entry.status === "error") {
-          slot.status = "failed";
-        }
+export function createTextureHandler(): AssetTypeHandler {
+  return {
+    componentType: "MeshMaterial",
+    onReady: (entity, asset, _slot, _world, binding) => {
+      const obj = binding.get(entity);
+      if (obj && obj instanceof THREE.Mesh) {
+        const textureAsset = asset as TextureAsset;
+        const texture = textureAsset.texture.clone();
+        const mat = obj.material as THREE.MeshStandardMaterial;
+        if (mat.map) mat.map.dispose();
+        mat.map = texture;
+        mat.needsUpdate = true;
       }
-    }
-
-    // Handle MeshMaterial added/updated — apply color to mesh material
-    for (const entity of world.getAdded("MeshMaterial" as any)) {
+    },
+    onAdded: (entity, world, binding) => {
       const obj = binding.get(entity);
       if (obj && obj instanceof THREE.Mesh) {
         const meshMat = world.getComponent(entity, "MeshMaterial" as any) as MeshMaterialData | undefined;
@@ -743,8 +804,8 @@ export function createTextureResolveSystem(
           if (mat.transparent !== wasTransparent) mat.needsUpdate = true;
         }
       }
-    }
-    for (const entity of world.getUpdated("MeshMaterial" as any)) {
+    },
+    onUpdated: (entity, world, binding) => {
       const obj = binding.get(entity);
       if (obj && obj instanceof THREE.Mesh) {
         const meshMat = world.getComponent(entity, "MeshMaterial" as any) as MeshMaterialData | undefined;
@@ -757,10 +818,8 @@ export function createTextureResolveSystem(
           if (mat.transparent !== wasTransparent) mat.needsUpdate = true;
         }
       }
-    }
-
-    // Handle removed MeshMaterial — clear texture from mesh and reset color
-    for (const entity of world.getRemoved("MeshMaterial" as any)) {
+    },
+    onRemoved: (entity, _world, binding) => {
       const obj = binding.get(entity);
       if (obj && obj instanceof THREE.Mesh) {
         const mat = obj.material as THREE.MeshStandardMaterial;
@@ -768,12 +827,37 @@ export function createTextureResolveSystem(
           mat.map.dispose();
           mat.map = null;
         }
-        // Reset color to default gray
         mat.color.setRGB(0.8, 0.8, 0.8);
         mat.opacity = 1.0;
         mat.transparent = false;
         mat.needsUpdate = true;
       }
-    }
+    },
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Legacy wrappers (deprecated — use createAssetResolveSystem)       */
+/* ------------------------------------------------------------------ */
+
+/** @deprecated Use createAssetResolveSystem with AssetResolver instead */
+export function createModelResolveSystem(
+  assetManager: AssetManager,
+  binding: ThreeBinding<RenderRegistry>,
+  slots: Map<string, SlotEntry>,
+): System<RenderRegistry> {
+  const resolver = new AssetResolver();
+  resolver.register(createModelHandler());
+  return createAssetResolveSystem(assetManager, binding, slots, resolver);
+}
+
+/** @deprecated Use createAssetResolveSystem with AssetResolver instead */
+export function createTextureResolveSystem(
+  assetManager: AssetManager,
+  binding: ThreeBinding<RenderRegistry>,
+  slots: Map<string, SlotEntry>,
+): System<RenderRegistry> {
+  const resolver = new AssetResolver();
+  resolver.register(createTextureHandler());
+  return createAssetResolveSystem(assetManager, binding, slots, resolver);
 }

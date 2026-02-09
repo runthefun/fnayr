@@ -4,7 +4,7 @@ import { CommandBuffer } from "../engine/ecs/commands";
 import { Hierarchy } from "../engine/ecs/hierarchy";
 import { renderingRegistry, renderingResources } from "../engine/rendering/components";
 import { ThreeBinding } from "../engine/rendering/binding";
-import { createRenderSyncSystem, createTransformSyncSystem, createAssetRequestSystem, createModelResolveSystem, createTextureResolveSystem } from "../engine/rendering/systems";
+import { createRenderSyncSystem, createTransformSyncSystem, createAssetRequestSystem, createAssetResolveSystem, AssetResolver, createModelHandler, createTextureHandler } from "../engine/rendering/systems";
 import type { SlotEntry } from "../engine/rendering/systems";
 import { createLightSyncSystem, createBackgroundSyncSystem } from "../engine/rendering/lights";
 import { GltfAssetLoader, TextureAssetLoader } from "../engine/rendering/loaders";
@@ -54,8 +54,10 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
 
   const renderSync = createRenderSyncSystem(binding);
   const assetRequestSync = createAssetRequestSystem(assetManager, slots, renderingRegistry);
-  const modelResolveSync = createModelResolveSystem(assetManager, binding, slots);
-  const textureResolveSync = createTextureResolveSystem(assetManager, binding, slots);
+  const assetResolver = new AssetResolver();
+  assetResolver.register(createModelHandler());
+  assetResolver.register(createTextureHandler());
+  const assetResolveSync = createAssetResolveSystem(assetManager, binding, slots, assetResolver);
   const lightSync = createLightSyncSystem(binding.scene, binding);
   const backgroundSync = createBackgroundSyncSystem(binding.scene);
   const transformSync = createTransformSyncSystem(binding, {
@@ -126,8 +128,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   // Run sync systems to build initial scene graph
   renderSync(world, 0, commands);
   assetRequestSync(world as any, 0, commands as any);
-  modelResolveSync(world as any, 0, commands as any);
-  textureResolveSync(world as any, 0, commands as any);
+  assetResolveSync(world as any, 0, commands as any);
   lightSync(world, 0, commands);
   backgroundSync(world, 0, commands);
   transformSync(world, 0, commands);
@@ -146,8 +147,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     controls.update(dt);
     renderSync(world, 0, commands);
     assetRequestSync(world as any, 0, commands as any);
-    modelResolveSync(world as any, 0, commands as any);
-    textureResolveSync(world as any, 0, commands as any);
+    assetResolveSync(world as any, 0, commands as any);
     lightSync(world, 0, commands);
     backgroundSync(world, 0, commands);
     transformSync(world, 0, commands);
