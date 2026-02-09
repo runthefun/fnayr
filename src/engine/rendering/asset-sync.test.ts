@@ -658,7 +658,6 @@ describe("Asset sync", () => {
     frame(() => {
       world.setComponent(entity, "VisualRenderer" as any, {
         kind: "mesh",
-        geometry: "box",
       });
     });
 
@@ -913,7 +912,6 @@ describe("Asset sync", () => {
     frame(() => {
       world.setComponent(entity, "VisualRenderer" as any, {
         kind: "mesh",
-        geometry: "box",
       });
     });
     expect(binding.get(entity)).toBeInstanceOf(THREE.Mesh);
@@ -1129,7 +1127,6 @@ describe("Asset sync", () => {
     frame(() => {
       world.setComponent(entity, "VisualRenderer" as any, {
         kind: "mesh",
-        geometry: "box",
       });
     });
 
@@ -1703,7 +1700,6 @@ describe("Asset sync", () => {
     frame(() => {
       world.setComponent(entity, "VisualRenderer" as any, {
         kind: "mesh",
-        geometry: "box",
       });
     });
 
