@@ -71,6 +71,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   world.beginFrame();
 
   const box = world.createEntity();
+  world.setComponent(box, "Meta", { name: "Box" });
   world.setComponent(box, "Transform3D", {
     position: [0, 1, 0],
     rotation: [0, 0, 0, 1],
@@ -91,6 +92,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   });
 
   const ground = world.createEntity();
+  world.setComponent(ground, "Meta", { name: "Ground" });
   world.setComponent(ground, "Transform3D", {
     position: [0, 0, 0],
     rotation: [-Math.SQRT1_2, 0, 0, Math.SQRT1_2],
@@ -111,12 +113,14 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
 
   // Lights as ECS entities
   const ambientEntity = world.createEntity();
+  world.setComponent(ambientEntity, "Meta", { name: "Ambient Light" });
   world.setComponent(ambientEntity, "AmbientLight", {
     color: [0.25, 0.25, 0.25, 1],
     intensity: 2,
   });
 
   const dirLightEntity = world.createEntity();
+  world.setComponent(dirLightEntity, "Meta", { name: "Directional Light" });
   world.setComponent(dirLightEntity, "Transform3D", {
     position: [5, 10, 7],
     rotation: [0, 0, 0, 1],
@@ -128,6 +132,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   });
 
   const bgEntity = world.createEntity();
+  world.setComponent(bgEntity, "Meta", { name: "Background" });
   world.setComponent(bgEntity, "Background", {
     color: [0.53, 0.81, 0.92],
     intensity: 1,

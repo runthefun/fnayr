@@ -1,11 +1,22 @@
+import { useState, useRef, useEffect } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useEditor, useSelectedEntity, useEntities } from "./useEditor";
 
 export function EntityTree() {
   const { world, hierarchy, store } = useEditor();
   const selectedEntity = useSelectedEntity();
+  const [renamingEntity, setRenamingEntity] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
   // Subscribe to entity changes so tree re-renders when entities change
   useEntities();
+
+  useEffect(() => {
+    if (renamingEntity !== null) {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }
+  }, [renamingEntity]);
 
   const entities: number[] = [];
   world.forEachEntity((e) => entities.push(e));
@@ -27,15 +38,28 @@ export function EntityTree() {
     world.destroyEntity(entity);
   }
 
+  function startRename(entity: number, currentName: string) {
+    setRenamingEntity(entity);
+    setRenameValue(currentName);
+  }
+
+  function commitRename(entity: number) {
+    const name = renameValue.trim();
+    const existing = world.getComponent(entity, "Meta") as { name: string } | undefined;
+    world.setComponent(entity, "Meta", { ...existing, name });
+    setRenamingEntity(null);
+  }
+
+  function cancelRename() {
+    setRenamingEntity(null);
+  }
+
   function renderEntity(entity: number, depth: number) {
     const children = hierarchy.getChildren(entity);
     const isSelected = entity === selectedEntity;
-    const components: string[] = [];
-    for (const type of Object.keys(world.registry) as Array<keyof typeof world.registry>) {
-      if (world.hasComponent(entity, type)) {
-        components.push(type);
-      }
-    }
+    const meta = world.getComponent(entity, "Meta") as { name: string } | undefined;
+    const label = meta?.name || "Entity";
+    const isRenaming = renamingEntity === entity;
 
     return (
       <div key={entity}>
@@ -45,37 +69,39 @@ export function EntityTree() {
           }`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
         >
-          <button
-            onClick={() => store.selectEntity(entity)}
-            className="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer"
-          >
-            <span className="text-muted text-[10px] shrink-0">
-              {entity}
-            </span>
-            <span className="truncate">
-              Entity {entity}
-            </span>
-          </button>
-          <span className="flex gap-0.5 shrink-0 items-center">
-            {components.map((c) => (
-              <span
-                key={c}
-                className="bg-subtle text-muted px-1 rounded text-[9px]"
-              >
-                {c}
-              </span>
-            ))}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteEntity(entity);
+          {isRenaming ? (
+            <input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={() => commitRename(entity)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRename(entity);
+                if (e.key === "Escape") cancelRename();
               }}
-              className="text-muted hover:text-primary text-[10px] ml-1 cursor-pointer"
-              title="Delete entity"
+              className="min-w-0 flex-1 bg-transparent text-primary text-[inherit] font-[inherit] p-0 rounded outline outline-1 outline-accent"
+            />
+          ) : (
+            <button
+              onClick={() => store.selectEntity(entity)}
+              onDoubleClick={() => startRename(entity, label)}
+              className="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer"
             >
-              <Trash2 size={12} />
+              <span className="truncate">
+                {label}
+              </span>
             </button>
-          </span>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteEntity(entity);
+            }}
+            className="text-muted hover:text-primary text-[10px] ml-1 cursor-pointer"
+            title="Delete entity"
+          >
+            <Trash2 size={12} />
+          </button>
         </div>
         {children.map((child) => renderEntity(child as number, depth + 1))}
       </div>

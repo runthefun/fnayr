@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Save, FolderOpen, Focus } from "lucide-react";
+import { Save, SaveAll, FolderOpen, Focus } from "lucide-react";
 import { useEditor, useSelectedEntity } from "./useEditor";
 import { worldToJson } from "../engine/ecs/bridge";
 import { parseWorld } from "../engine/world";
@@ -12,12 +12,58 @@ export function Toolbar() {
   const { store, world, hierarchy, binding, controls } = useEditor();
   const selectedEntity = useSelectedEntity();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileHandleRef = useRef<any>(null);
 
-  function handleSave() {
+  function getSceneContents() {
     const { json } = worldToJson(renderingRegistry, world, { hierarchy });
-    const blob = new Blob([JSON.stringify(json, null, 2)], {
-      type: "application/json",
-    });
+    return JSON.stringify(json, null, 2);
+  }
+
+  async function writeToHandle(handle: any, contents: string) {
+    const writable = await handle.createWritable();
+    await writable.write(contents);
+    await writable.close();
+  }
+
+  async function handleSave() {
+    const contents = getSceneContents();
+
+    if (fileHandleRef.current) {
+      try {
+        await writeToHandle(fileHandleRef.current, contents);
+        return;
+      } catch (err: any) {
+        // Permission revoked or file gone — fall through to Save As
+      }
+    }
+
+    await handleSaveAs();
+  }
+
+  async function handleSaveAs() {
+    const contents = getSceneContents();
+
+    if ("showSaveFilePicker" in window) {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: "scene.json",
+          types: [
+            {
+              description: "JSON Scene",
+              accept: { "application/json": [".json"] },
+            },
+          ],
+        });
+        await writeToHandle(handle, contents);
+        fileHandleRef.current = handle;
+        return;
+      } catch (err: any) {
+        if (err.name === "AbortError") return;
+      }
+    }
+
+    // Fallback: download
+    const blob = new Blob([contents], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -26,7 +72,29 @@ export function Toolbar() {
     URL.revokeObjectURL(url);
   }
 
-  function handleLoad() {
+  async function handleLoad() {
+    if ("showOpenFilePicker" in window) {
+      try {
+        const [handle] = await (window as any).showOpenFilePicker({
+          types: [
+            {
+              description: "JSON Scene",
+              accept: { "application/json": [".json"] },
+            },
+          ],
+        });
+        const file = await handle.getFile();
+        const text = await file.text();
+        const json = JSON.parse(text);
+        loadScene(json);
+        fileHandleRef.current = handle;
+        return;
+      } catch (err: any) {
+        if (err.name === "AbortError") return;
+      }
+    }
+
+    // Fallback: file input
     fileInputRef.current?.click();
   }
 
@@ -39,6 +107,7 @@ export function Toolbar() {
       try {
         const json = JSON.parse(reader.result as string);
         loadScene(json);
+        fileHandleRef.current = null;
       } catch (err) {
         console.error("Failed to load scene:", err);
       }
@@ -98,20 +167,27 @@ export function Toolbar() {
   }
 
   return (
-    <div className="flex gap-2 px-2 py-1.5 border-b border-subtle bg-panel">
+    <div className="flex gap-1 px-2 py-1.5 border-b border-subtle bg-panel overflow-x-auto">
       <button
         onClick={handleSave}
-        className="flex items-center gap-1 px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle"
+        className="p-1 bg-surface hover:bg-subtle text-primary rounded border border-subtle"
+        title="Save"
       >
         <Save size={14} />
-        Save
+      </button>
+      <button
+        onClick={handleSaveAs}
+        className="p-1 bg-surface hover:bg-subtle text-primary rounded border border-subtle"
+        title="Save As"
+      >
+        <SaveAll size={14} />
       </button>
       <button
         onClick={handleLoad}
-        className="flex items-center gap-1 px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle"
+        className="p-1 bg-surface hover:bg-subtle text-primary rounded border border-subtle"
+        title="Load"
       >
         <FolderOpen size={14} />
-        Load
       </button>
       <button
         onClick={() => {
@@ -120,10 +196,10 @@ export function Toolbar() {
           if (obj) controls.focusOnObject(obj);
         }}
         disabled={selectedEntity == null}
-        className="flex items-center gap-1 px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle disabled:opacity-40 disabled:cursor-default"
+        className="p-1 bg-surface hover:bg-subtle text-primary rounded border border-subtle disabled:opacity-40 disabled:cursor-default"
+        title="Focus"
       >
         <Focus size={14} />
-        Focus
       </button>
       <input
         ref={fileInputRef}

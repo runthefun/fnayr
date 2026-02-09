@@ -158,7 +158,14 @@ export const renderingResources = {
   LoadingState,
 } as const;
 
+export const Meta = defineSchema(
+  s.object({
+    name: s.string({ default: "" }),
+  })
+);
+
 export const renderingRegistry = {
+  Meta,
   Transform3D,
   VisualRenderer,
   Geometry,

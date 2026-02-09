@@ -19,6 +19,11 @@ export function createBackgroundSyncSystem(
   }
 
   return (world: World<LightRegistry>, _dt: number, _commands: Commands<LightRegistry>) => {
+    for (const _entity of world.getRemoved("Background" as any)) {
+      scene.background = null;
+      scene.backgroundIntensity = 1;
+      scene.backgroundBlurriness = 0;
+    }
     for (const entity of world.getAdded("Background" as any)) {
       const data = world.getComponent(entity, "Background" as any) as any;
       if (!data) continue;
@@ -28,11 +33,6 @@ export function createBackgroundSyncSystem(
       const data = world.getComponent(entity, "Background" as any) as any;
       if (!data) continue;
       applyBackground(data);
-    }
-    for (const _entity of world.getRemoved("Background" as any)) {
-      scene.background = null;
-      scene.backgroundIntensity = 1;
-      scene.backgroundBlurriness = 0;
     }
   };
 }
