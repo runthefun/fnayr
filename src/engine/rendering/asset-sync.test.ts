@@ -190,14 +190,13 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
 
     // Slot is pending, placeholder Group exists in binding
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.get(sk)?.status).toBe("pending");
     expect(binding.has(entity)).toBe(true);
     expect(binding.get(entity)).toBeInstanceOf(THREE.Group);
@@ -224,8 +223,7 @@ describe("Asset sync", () => {
     // Pre-load an asset
     const e1 = world.createEntity();
     frame(() => {
-      world.setComponent(e1, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e1, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -233,30 +231,28 @@ describe("Asset sync", () => {
     await tick();
     frame(); // e1 now active
 
-    expect(slots.get(`${e1}:VisualRenderer`)?.status).toBe("active");
+    expect(slots.get(`${e1}:ModelVisual`)?.status).toBe("active");
 
     // Add a SECOND entity with the same URI
     const e2 = world.createEntity();
     frame(() => {
-      world.setComponent(e2, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e2, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
 
     // Path B cache hit: should be active in the same frame
-    expect(slots.get(`${e2}:VisualRenderer`)?.status).toBe("active");
+    expect(slots.get(`${e2}:ModelVisual`)?.status).toBe("active");
     expect(binding.has(e2)).toBe(true);
   });
 
-  // ---- 3. Remove ModelRenderer detaches bound object and releases ref ----
-  it("remove ModelRenderer detaches bound object and releases ref", async () => {
+  // ---- 3. Remove ModelVisual detaches bound object and releases ref ----
+  it("remove ModelVisual detaches bound object and releases ref", async () => {
     const { world, binding, scene, slots, mock, frame } = setup();
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -265,12 +261,12 @@ describe("Asset sync", () => {
     frame(); // Model bound
 
     expect(binding.has(entity)).toBe(true);
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.has(sk)).toBe(true);
 
     // Remove the component
     frame(() => {
-      world.removeComponent(entity, "VisualRenderer" as any);
+      world.removeComponent(entity, "ModelVisual" as any);
     });
 
     expect(binding.has(entity)).toBe(false);
@@ -288,12 +284,11 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.has(sk)).toBe(true);
 
     // Destroy entity
@@ -319,8 +314,7 @@ describe("Asset sync", () => {
 
     // Add model with a.glb
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "a.glb" },
       });
     });
@@ -328,13 +322,13 @@ describe("Asset sync", () => {
     await tick();
     frame(); // active
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.get(sk)?.status).toBe("active");
     expect(binding.has(entity)).toBe(true);
 
     // Update asset to b.glb
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "glb", uri: "b.glb" };
     });
 
@@ -358,8 +352,7 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -367,13 +360,13 @@ describe("Asset sync", () => {
     await tick();
     frame(); // active
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     const slotBefore = { ...slots.get(sk)! };
     expect(slotBefore.status).toBe("active");
 
     // Touch the component with the same data
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "glb", uri: "robot.glb" };
     });
 
@@ -389,8 +382,7 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -401,12 +393,12 @@ describe("Asset sync", () => {
     await tick();
     frame(); // active, full clone
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.get(sk)?.status).toBe("active");
 
     // Update sub to "arm"
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "glb", uri: "robot.glb", sub: "arm" };
     });
 
@@ -428,8 +420,7 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: {
           kind: "asset",
           type: "glb",
@@ -462,8 +453,7 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: {
           kind: "asset",
           type: "glb",
@@ -491,15 +481,14 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "" },
       });
     });
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.has(sk)).toBe(false);
-    // Placeholder Group still created by renderSync for model variant
+    // Placeholder Group still created by renderSync for ModelVisual
     expect(binding.has(entity)).toBe(true);
     expect(binding.get(entity)).toBeInstanceOf(THREE.Group);
   });
@@ -510,18 +499,17 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "" },
       });
     });
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.has(sk)).toBe(false);
 
     // Update to a real URI
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "glb", uri: "robot.glb" };
     });
 
@@ -542,8 +530,7 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -551,13 +538,13 @@ describe("Asset sync", () => {
     await tick();
     frame(); // active
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.get(sk)?.status).toBe("active");
     expect(binding.has(entity)).toBe(true);
 
     // Update to empty URI
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "glb", uri: "" };
     });
 
@@ -572,13 +559,12 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
       });
     });
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.has(sk)).toBe(true);
     expect(slots.get(sk)?.status).toBe("failed");
     expect(warnSpy).toHaveBeenCalled();
@@ -593,8 +579,7 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
       });
     });
@@ -619,16 +604,13 @@ describe("Asset sync", () => {
     const e3 = world.createEntity();
 
     frame(() => {
-      world.setComponent(e1, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e1, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "a.glb" },
       });
-      world.setComponent(e2, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e2, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "b.glb" },
       });
-      world.setComponent(e3, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e3, "ModelVisual" as any, {
         asset: { kind: "asset", type: "texture", uri: "tex.png" },
       });
     });
@@ -657,30 +639,28 @@ describe("Asset sync", () => {
     warnSpy.mockRestore();
   });
 
-  // ---- 16. Variant transition: mesh→model replaces mesh ----
+  // ---- 16. Variant transition: mesh→model via remove MeshVisual + add ModelVisual ----
   it("variant transition mesh→model: model replaces mesh after resolve", async () => {
     const { world, binding, scene, mock, frame } = setup();
     const entity = world.createEntity();
 
-    // Start with mesh variant
+    // Start with MeshVisual
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "mesh",
-      });
+      world.setComponent(entity, "MeshVisual" as any);
     });
 
     expect(binding.has(entity)).toBe(true);
     expect(binding.get(entity)).toBeInstanceOf(THREE.Mesh);
 
-    // Switch to model variant
+    // Switch to ModelVisual: remove MeshVisual, add ModelVisual
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.removeComponent(entity, "MeshVisual" as any);
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
 
-    // Mesh replaced with placeholder Group on variant switch
+    // Mesh removed, placeholder Group created
     expect(binding.has(entity)).toBe(true);
     expect(binding.get(entity)).toBeInstanceOf(THREE.Group);
 
@@ -695,19 +675,18 @@ describe("Asset sync", () => {
     expect(obj.name).toBe("robot");
   });
 
-  // ---- 17. Setting model variant on add creates placeholder Group, not a mesh ----
-  it("setting model variant on add creates placeholder Group, not a mesh", () => {
+  // ---- 17. Setting ModelVisual on add creates placeholder Group, not a mesh ----
+  it("setting ModelVisual on add creates placeholder Group, not a mesh", () => {
     const { world, binding, frame } = setup();
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
 
-    // model variant: renderSync creates a placeholder Group (not a Mesh)
+    // ModelVisual: renderSync creates a placeholder Group (not a Mesh)
     const obj = binding.get(entity);
     expect(obj).toBeInstanceOf(THREE.Group);
     expect(obj).not.toBeInstanceOf(THREE.Mesh);
@@ -724,8 +703,7 @@ describe("Asset sync", () => {
         color: [1, 1, 1, 1],
         intensity: 1,
       });
-      world.setComponent(modelEntity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(modelEntity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -754,8 +732,7 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "bad.glb" },
       });
     });
@@ -764,7 +741,7 @@ describe("Asset sync", () => {
     await tick();
     frame();
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.get(sk)?.status).toBe("failed");
   });
 
@@ -776,18 +753,17 @@ describe("Asset sync", () => {
 
     // Unsupported type → slot immediately failed with key=""
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "texture", uri: "tex.png" },
       });
     });
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.get(sk)?.status).toBe("failed");
 
     // Remove component, frame → no crash
     frame(() => {
-      world.removeComponent(entity, "VisualRenderer" as any);
+      world.removeComponent(entity, "ModelVisual" as any);
     });
 
     expect(slots.has(sk)).toBe(false);
@@ -806,8 +782,7 @@ describe("Asset sync", () => {
         rotation: [0, 0, 0, 1],
         scale: [2, 2, 2],
       });
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -832,18 +807,17 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.has(sk)).toBe(true);
 
-    // Remove ModelRenderer before resolve
+    // Remove ModelVisual before resolve
     frame(() => {
-      world.removeComponent(entity, "VisualRenderer" as any);
+      world.removeComponent(entity, "ModelVisual" as any);
     });
 
     // Slot should be cleaned up by the removed handler
@@ -863,12 +837,11 @@ describe("Asset sync", () => {
     const { world, slots, mock, frame, assetRequest } = setup();
     const entity = world.createEntity();
     const loadSpy = vi.spyOn(mock.loader, "load");
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     const key = AssetManager.cacheKey("glb", "bad.glb");
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "bad.glb" },
       });
     });
@@ -891,11 +864,10 @@ describe("Asset sync", () => {
   it("URI key switch clears active model binding before new asset is ready", async () => {
     const { world, binding, scene, slots, mock, frame } = setup();
     const entity = world.createEntity();
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "a.glb" },
       });
     });
@@ -908,7 +880,7 @@ describe("Asset sync", () => {
     expect(binding.has(entity)).toBe(true);
 
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "glb", uri: "b.glb" };
     });
 
@@ -924,15 +896,13 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "mesh",
-      });
+      world.setComponent(entity, "MeshVisual" as any);
     });
     expect(binding.get(entity)).toBeInstanceOf(THREE.Mesh);
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.removeComponent(entity, "MeshVisual" as any);
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -952,11 +922,10 @@ describe("Asset sync", () => {
   it("failed slot remains failed when only sub changes", async () => {
     const { world, slots, mock, frame } = setup();
     const entity = world.createEntity();
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "bad.glb" },
       });
     });
@@ -968,7 +937,7 @@ describe("Asset sync", () => {
     expect(slots.get(sk)?.status).toBe("failed");
 
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = {
         kind: "asset",
         type: "glb",
@@ -984,11 +953,10 @@ describe("Asset sync", () => {
   it("pending slot sub change advances generation", () => {
     const { world, slots, frame } = setup();
     const entity = world.createEntity();
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: {
           kind: "asset",
           type: "glb",
@@ -1002,7 +970,7 @@ describe("Asset sync", () => {
     expect(slots.get(sk)?.version).toBe(0);
 
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = {
         kind: "asset",
         type: "glb",
@@ -1019,11 +987,10 @@ describe("Asset sync", () => {
   it("failed slot sub change advances generation", async () => {
     const { world, slots, mock, frame } = setup();
     const entity = world.createEntity();
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "bad.glb", sub: "arm" },
       });
     });
@@ -1035,7 +1002,7 @@ describe("Asset sync", () => {
     expect(slots.get(sk)?.version).toBe(0);
 
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = {
         kind: "asset",
         type: "glb",
@@ -1053,11 +1020,10 @@ describe("Asset sync", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { world, slots, assetManager, assetRequest, frame } = setup();
     const entity = world.createEntity();
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
       });
     });
@@ -1089,12 +1055,10 @@ describe("Asset sync", () => {
     const e2 = world.createEntity();
 
     frame(() => {
-      world.setComponent(e1, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e1, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "rig.glb" },
       });
-      world.setComponent(e2, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e2, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "rig.glb" },
       });
     });
@@ -1124,10 +1088,9 @@ describe("Asset sync", () => {
     const { world, binding, scene, slots, mock, frame } = setup();
     const entity = world.createEntity();
 
-    // Start with model variant
+    // Start with ModelVisual
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -1137,15 +1100,14 @@ describe("Asset sync", () => {
 
     expect(binding.get(entity)).toBeInstanceOf(THREE.Group);
 
-    // Switch to mesh variant via setComponent (replaces entire component data)
+    // Switch to MeshVisual: remove ModelVisual, add MeshVisual
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "mesh",
-      });
+      world.removeComponent(entity, "ModelVisual" as any);
+      world.setComponent(entity, "MeshVisual" as any);
     });
 
-    // Slot should be cleaned up (variant no longer has asset ref)
-    expect(slots.has(`${entity}:VisualRenderer`)).toBe(false);
+    // Slot should be cleaned up (ModelVisual removed)
+    expect(slots.has(`${entity}:ModelVisual`)).toBe(false);
     // Binding should be a mesh now
     expect(binding.has(entity)).toBe(true);
     expect(binding.get(entity)).toBeInstanceOf(THREE.Mesh);
@@ -1157,8 +1119,7 @@ describe("Asset sync", () => {
     const e1 = world.createEntity();
 
     frame(() => {
-      world.setComponent(e1, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e1, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "bad.glb" },
       });
     });
@@ -1166,18 +1127,17 @@ describe("Asset sync", () => {
     await tick();
     frame();
 
-    expect(slots.get(`${e1}:VisualRenderer`)?.status).toBe("failed");
+    expect(slots.get(`${e1}:ModelVisual`)?.status).toBe("failed");
 
     const e2 = world.createEntity();
     frame(() => {
-      world.setComponent(e2, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e2, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "bad.glb" },
       });
     });
     frame();
 
-    expect(slots.get(`${e2}:VisualRenderer`)?.status).toBe("failed");
+    expect(slots.get(`${e2}:ModelVisual`)?.status).toBe("failed");
   });
 
   // ---- 30b. Active model should clear when switching to URI already cached as error ----
@@ -1186,8 +1146,7 @@ describe("Asset sync", () => {
 
     const badEntity = world.createEntity();
     frame(() => {
-      world.setComponent(badEntity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(badEntity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "bad.glb" },
       });
     });
@@ -1196,10 +1155,9 @@ describe("Asset sync", () => {
     frame();
 
     const entity = world.createEntity();
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "good.glb" },
       });
     });
@@ -1211,7 +1169,7 @@ describe("Asset sync", () => {
     expect(binding.has(entity)).toBe(true);
 
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "glb", uri: "bad.glb" };
     });
 
@@ -1226,12 +1184,10 @@ describe("Asset sync", () => {
     const e2 = world.createEntity();
 
     frame(() => {
-      world.setComponent(e1, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e1, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
-      world.setComponent(e2, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e2, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -1258,8 +1214,7 @@ describe("Asset sync", () => {
     const key = AssetManager.cacheKey("glb", "robot.glb");
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -1271,13 +1226,13 @@ describe("Asset sync", () => {
 
     // Remove component and destroy entity in same frame
     frame(() => {
-      world.removeComponent(entity, "VisualRenderer" as any);
+      world.removeComponent(entity, "ModelVisual" as any);
       world.destroyEntity(entity);
     });
 
     // No double-release: entry cleaned up once
     expect(assetManager.peek(key)).toBeUndefined();
-    expect(slots.has(`${entity}:VisualRenderer`)).toBe(false);
+    expect(slots.has(`${entity}:ModelVisual`)).toBe(false);
   });
 
   // ---- 33. Multiple writes same frame coalesce to one effective transition ----
@@ -1287,8 +1242,7 @@ describe("Asset sync", () => {
     const loadSpy = vi.spyOn(mock.loader, "load");
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "a.glb" },
       });
     });
@@ -1300,13 +1254,13 @@ describe("Asset sync", () => {
 
     // Two writes in one frame: uri a→b→c
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "glb", uri: "b.glb" };
-      const mr2 = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr2 = world.getMut(entity, "ModelVisual" as any) as any;
       mr2.asset = { kind: "asset", type: "glb", uri: "c.glb" };
     });
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     // System sees only the final value (c.glb), not intermediate (b.glb)
     expect(slots.get(sk)?.uri).toBe("c.glb");
     expect(slots.get(sk)?.status).toBe("pending");
@@ -1349,8 +1303,7 @@ describe("Asset sync", () => {
     root.add(head);
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "char.glb", sub: "arm" },
       });
     });
@@ -1378,13 +1331,12 @@ describe("Asset sync", () => {
     const key = AssetManager.cacheKey("texture", "diffuse.png");
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
       });
     });
 
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
     expect(slots.get(sk)?.status).toBe("failed");
     expect(slots.get(sk)?.key).toBe("");
     // No entry in asset manager (no loader, so no request was made)
@@ -1398,11 +1350,10 @@ describe("Asset sync", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { world, slots, assetManager, frame } = setup();
     const entity = world.createEntity();
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
       });
     });
@@ -1420,7 +1371,7 @@ describe("Asset sync", () => {
 
     // Touch the component (triggers update event)
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "texture", uri: "diffuse.png" };
     });
 
@@ -1434,11 +1385,10 @@ describe("Asset sync", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { world, slots, frame } = setup();
     const entity = world.createEntity();
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
       });
     });
@@ -1446,7 +1396,7 @@ describe("Asset sync", () => {
 
     // Touch without registering loader → no recovery
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "texture", uri: "diffuse.png" };
     });
 
@@ -1460,11 +1410,10 @@ describe("Asset sync", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { world, slots, frame } = setup();
     const entity = world.createEntity();
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "texture", uri: "a.png" },
       });
     });
@@ -1475,7 +1424,7 @@ describe("Asset sync", () => {
     expect(first?.version).toBe(0);
 
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "texture", uri: "b.png" };
     });
 
@@ -1495,8 +1444,7 @@ describe("Asset sync", () => {
     const key = AssetManager.cacheKey("glb", "bad.glb");
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "bad.glb" },
       });
     });
@@ -1504,7 +1452,7 @@ describe("Asset sync", () => {
     await tick();
     frame();
 
-    expect(slots.get(`${entity}:VisualRenderer`)?.status).toBe("failed");
+    expect(slots.get(`${entity}:ModelVisual`)?.status).toBe("failed");
     loadSpy.mockClear();
 
     // Call retryFailed twice — should produce at most one new request
@@ -1523,8 +1471,7 @@ describe("Asset sync", () => {
     const e3 = world.createEntity();
 
     frame(() => {
-      world.setComponent(e1, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e1, "ModelVisual" as any, {
         asset: {
           kind: "asset",
           type: "glb",
@@ -1532,8 +1479,7 @@ describe("Asset sync", () => {
           options: { quality: "high" },
         },
       });
-      world.setComponent(e2, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e2, "ModelVisual" as any, {
         asset: {
           kind: "asset",
           type: "glb",
@@ -1541,8 +1487,7 @@ describe("Asset sync", () => {
           options: { quality: "low" },
         },
       });
-      world.setComponent(e3, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e3, "ModelVisual" as any, {
         asset: {
           kind: "asset",
           type: "glb",
@@ -1567,8 +1512,7 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "texture", uri: "diffuse.png" },
       });
     });
@@ -1580,7 +1524,7 @@ describe("Asset sync", () => {
 
     // Touch component with same data — should NOT warn again
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "texture", uri: "diffuse.png" };
     });
 
@@ -1599,8 +1543,7 @@ describe("Asset sync", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: {
           kind: "asset",
           type: "glb",
@@ -1655,12 +1598,10 @@ describe("Asset sync", () => {
     const key = AssetManager.cacheKey("glb", "robot.glb");
 
     frame(() => {
-      world.setComponent(e1, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e1, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
-      world.setComponent(e2, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(e2, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -1680,7 +1621,7 @@ describe("Asset sync", () => {
 
     // Remove first entity's component — source NOT disposed
     frame(() => {
-      world.removeComponent(e1, "VisualRenderer" as any);
+      world.removeComponent(e1, "ModelVisual" as any);
     });
     expect(assetManager.peek(key)?.refCount).toBe(1);
     expect(assetManager.peek(key)?.status).toBe("ready");
@@ -1688,20 +1629,19 @@ describe("Asset sync", () => {
 
     // Remove second entity's component — source disposed at zero refCount
     frame(() => {
-      world.removeComponent(e2, "VisualRenderer" as any);
+      world.removeComponent(e2, "ModelVisual" as any);
     });
     expect(assetManager.peek(key)).toBeUndefined();
     expect(mock.disposed).toContain(sourceAsset);
   });
 
-  // ---- 44. Variant transition model→mesh via getMut creates mesh in same frame ----
-  it("switching active model to mesh variant creates mesh binding in same frame", async () => {
+  // ---- 44. Variant transition model→mesh via remove+add creates mesh in same frame ----
+  it("switching active model to mesh creates mesh binding in same frame", async () => {
     const { world, binding, mock, frame } = setup();
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -1710,14 +1650,13 @@ describe("Asset sync", () => {
     frame();
     expect(binding.get(entity)).toBeInstanceOf(THREE.Group);
 
-    // Switch variant to mesh
+    // Switch to MeshVisual
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "mesh",
-      });
+      world.removeComponent(entity, "ModelVisual" as any);
+      world.setComponent(entity, "MeshVisual" as any);
     });
 
-    expect(world.hasComponent(entity, "VisualRenderer" as any)).toBe(true);
+    expect(world.hasComponent(entity, "MeshVisual" as any)).toBe(true);
     expect(binding.has(entity)).toBe(true);
     expect(binding.get(entity)).toBeInstanceOf(THREE.Mesh);
   });
@@ -1727,11 +1666,10 @@ describe("Asset sync", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { world, binding, slots, mock, frame } = setup();
     const entity = world.createEntity();
-    const sk = `${entity}:VisualRenderer`;
+    const sk = `${entity}:ModelVisual`;
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
     });
@@ -1743,7 +1681,7 @@ describe("Asset sync", () => {
     expect(binding.has(entity)).toBe(true);
 
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer" as any) as any;
+      const mr = world.getMut(entity, "ModelVisual" as any) as any;
       mr.asset = { kind: "asset", type: "texture", uri: "diffuse.png" };
     });
 
@@ -1752,8 +1690,8 @@ describe("Asset sync", () => {
     warnSpy.mockRestore();
   });
 
-  // ---- 46. Non-ModelRenderer asset slots must not be resolved as glTF models ----
-  it("model resolver ignores ready slots that do not belong to ModelRenderer", async () => {
+  // ---- 46. Non-ModelVisual asset slots must not be resolved as glTF models ----
+  it("model resolver ignores ready slots that do not belong to ModelVisual", async () => {
     const AudioAsset = defineSchema(
       s.object({
         asset: assetRefSchema,
@@ -1821,8 +1759,7 @@ describe("Asset sync", () => {
 
     const entity = world.createEntity();
     frame(() => {
-      world.setComponent(entity, "VisualRenderer" as any, {
-        kind: "model",
+      world.setComponent(entity, "ModelVisual" as any, {
         asset: { kind: "asset", type: "glb", uri: "robot.glb" },
       });
       world.setComponent(entity, "AudioAsset" as any, {

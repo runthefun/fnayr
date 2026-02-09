@@ -36,25 +36,19 @@ type RenderResources = typeof renderingResources;
 // Concrete data shapes for typed assertions (mirrors schema-derived values)
 type Transform3DData = { position: number[]; rotation: number[]; scale: number[] };
 
-type MeshData = {
-  kind: "mesh";
-};
-
 type GeometryData =
   | { kind: "box"; width: number; height: number; depth: number }
   | { kind: "sphere"; radius: number; widthSegments: number; heightSegments: number }
   | { kind: "plane"; width: number; height: number };
 
-type ModelData = {
-  kind: "model";
-  asset: { type: string; uri: string; sub?: string; options?: Record<string, unknown> };
+type MeshVisualData = {
+  geometry: GeometryData;
+  color: [number, number, number, number];
+  texture: { type: string; uri: string; sub?: string; options?: Record<string, unknown> };
 };
 
-type VisualRendererData = MeshData | ModelData;
-
-type MeshMaterialData = {
-  texture: { type: string; uri: string; sub?: string; options?: Record<string, unknown> };
-  color: [number, number, number, number];
+type ModelVisualData = {
+  asset: { type: string; uri: string; sub?: string; options?: Record<string, unknown> };
 };
 
 function createGeometry(
@@ -86,16 +80,13 @@ export function applyTransform(
 }
 
 function createMeshObject<R extends RenderRegistry>(
-  _mr: MeshData,
+  data: MeshVisualData,
   entity: number,
   world: World<R>,
   binding: ThreeBinding<R>,
 ): void {
-  const geo = world.getComponent(entity, "Geometry" as ComponentType<R>) as GeometryData | undefined;
-  const geometry = createGeometry(geo);
-  // Read color from MeshMaterial component if present, else default gray
-  const meshMat = world.getComponent(entity, "MeshMaterial" as ComponentType<R>) as MeshMaterialData | undefined;
-  const color = meshMat?.color ?? [0.8, 0.8, 0.8, 1.0];
+  const geometry = createGeometry(data.geometry);
+  const color = data.color;
   const material = new THREE.MeshStandardMaterial({
     color: new THREE.Color(color[0], color[1], color[2]),
     opacity: color[3],
@@ -114,88 +105,59 @@ function createMeshObject<R extends RenderRegistry>(
 }
 
 /**
- * Creates a system that synchronizes ECS VisualRenderer components
- * into the Three.js scene graph managed by the given binding.
+ * Creates a system that synchronizes ECS MeshVisual and ModelVisual
+ * components into the Three.js scene graph managed by the given binding.
  */
 export function createRenderSyncSystem<R extends RenderRegistry>(
   binding: ThreeBinding<R>,
 ): System<R> {
   return (world: World<R>, _dt: number, _commands: Commands<R>) => {
-    // 1. Added VisualRenderer
-    for (const entity of world.getAdded("VisualRenderer" as ComponentType<R>)) {
-      const vr = world.getComponent(entity, "VisualRenderer" as ComponentType<R>) as VisualRendererData | undefined;
-      if (!vr) continue;
+    // --- Removals first (so variant transitions don't clobber new bindings) ---
 
-      if (vr.kind === "mesh") {
-        createMeshObject(vr, entity, world, binding);
-      } else if (vr.kind === "model") {
-        // Create a placeholder Group so transform sync, hierarchy, and
-        // selection work while the model loads asynchronously.
-        const placeholder = new THREE.Group();
-        placeholder.userData.entityId = entity;
-        const transform = world.getComponent(entity, "Transform3D" as ComponentType<R>) as Transform3DData | undefined;
-        if (transform) applyTransform(placeholder, transform);
-        binding.set(entity, placeholder);
-        binding.scene.add(placeholder);
-      }
-    }
-
-    // 2. Removed VisualRenderer — delete binding
-    for (const entity of world.getRemoved("VisualRenderer" as ComponentType<R>)) {
+    for (const entity of world.getRemoved("MeshVisual" as ComponentType<R>)) {
       binding.delete(entity);
     }
 
-    // 3. Updated VisualRenderer — dispatch on kind
-    for (const entity of world.getUpdated("VisualRenderer" as ComponentType<R>)) {
-      const vr = world.getComponent(entity, "VisualRenderer" as ComponentType<R>) as VisualRendererData | undefined;
-      if (!vr) continue;
-
-      if (vr.kind === "mesh") {
-        const obj = binding.get(entity);
-        if (!obj || !(obj instanceof THREE.Mesh)) {
-          // Was model (or nothing) — delete old binding and create mesh
-          binding.delete(entity);
-          createMeshObject(vr, entity, world, binding);
-        }
-      } else if (vr.kind === "model") {
-        const obj = binding.get(entity);
-        if (obj && obj instanceof THREE.Mesh) {
-          // Was mesh — replace with placeholder Group for model loading
-          binding.delete(entity);
-          const placeholder = new THREE.Group();
-          placeholder.userData.entityId = entity;
-          const transform = world.getComponent(entity, "Transform3D" as ComponentType<R>) as Transform3DData | undefined;
-          if (transform) applyTransform(placeholder, transform);
-          binding.set(entity, placeholder);
-          binding.scene.add(placeholder);
-        }
-      }
+    for (const entity of world.getRemoved("ModelVisual" as ComponentType<R>)) {
+      binding.delete(entity);
     }
 
-    // 4. Geometry component changes — swap geometry on existing meshes
-    for (const entity of world.getAdded("Geometry" as ComponentType<R>)) {
-      const obj = binding.get(entity);
-      if (obj && obj instanceof THREE.Mesh) {
-        const geo = world.getComponent(entity, "Geometry" as ComponentType<R>) as GeometryData | undefined;
-        obj.geometry.dispose();
-        obj.geometry = createGeometry(geo);
-      }
+    // --- MeshVisual additions + updates ---
+
+    for (const entity of world.getAdded("MeshVisual" as ComponentType<R>)) {
+      const mv = world.getComponent(entity, "MeshVisual" as ComponentType<R>) as MeshVisualData | undefined;
+      if (!mv) continue;
+      createMeshObject(mv, entity, world, binding);
     }
-    for (const entity of world.getUpdated("Geometry" as ComponentType<R>)) {
-      const obj = binding.get(entity);
-      if (obj && obj instanceof THREE.Mesh) {
-        const geo = world.getComponent(entity, "Geometry" as ComponentType<R>) as GeometryData | undefined;
-        obj.geometry.dispose();
-        obj.geometry = createGeometry(geo);
-      }
-    }
-    for (const entity of world.getRemoved("Geometry" as ComponentType<R>)) {
+
+    for (const entity of world.getUpdated("MeshVisual" as ComponentType<R>)) {
+      const mv = world.getComponent(entity, "MeshVisual" as ComponentType<R>) as MeshVisualData | undefined;
+      if (!mv) continue;
       const obj = binding.get(entity);
       if (obj && obj instanceof THREE.Mesh) {
         obj.geometry.dispose();
-        obj.geometry = createGeometry(undefined);
+        obj.geometry = createGeometry(mv.geometry);
+        const mat = obj.material as THREE.MeshStandardMaterial;
+        mat.color.setRGB(mv.color[0], mv.color[1], mv.color[2]);
+        mat.opacity = mv.color[3];
+        const wasTransparent = mat.transparent;
+        mat.transparent = mv.color[3] < 1;
+        if (mat.transparent !== wasTransparent) mat.needsUpdate = true;
       }
     }
+
+    // --- ModelVisual additions ---
+
+    for (const entity of world.getAdded("ModelVisual" as ComponentType<R>)) {
+      const placeholder = new THREE.Group();
+      placeholder.userData.entityId = entity;
+      const transform = world.getComponent(entity, "Transform3D" as ComponentType<R>) as Transform3DData | undefined;
+      if (transform) applyTransform(placeholder, transform);
+      binding.set(entity, placeholder);
+      binding.scene.add(placeholder);
+    }
+
+    // ModelVisual updated → no-op (asset system handles URI changes)
   };
 }
 

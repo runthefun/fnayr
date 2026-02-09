@@ -53,37 +53,35 @@ export const Transform3D = defineSchema(
   })
 );
 
-export const VisualRenderer = defineSchema(
-  s.tagged("kind", {
-    mesh: s.object({
-      kind: s.literal("mesh"),
+export const MeshVisual = defineSchema(
+  s.object({
+    geometry: s.tagged("kind", {
+      box: s.object({
+        kind: s.literal("box"),
+        width: s.number({ finite: true, default: 1 }),
+        height: s.number({ finite: true, default: 1 }),
+        depth: s.number({ finite: true, default: 1 }),
+      }),
+      sphere: s.object({
+        kind: s.literal("sphere"),
+        radius: s.number({ finite: true, default: 0.5 }),
+        widthSegments: s.number({ integer: true, default: 32 }),
+        heightSegments: s.number({ integer: true, default: 16 }),
+      }),
+      plane: s.object({
+        kind: s.literal("plane"),
+        width: s.number({ finite: true, default: 1 }),
+        height: s.number({ finite: true, default: 1 }),
+      }),
     }),
-    model: s.object({
-      kind: s.literal("model"),
-      asset: assetRef("glb", { hidden: ["sub", "options"] }),
-    }),
+    color: colorTuple,
+    texture: assetRef("texture", { hidden: ["sub", "options"] }),
   })
 );
 
-export const Geometry = defineSchema(
-  s.tagged("kind", {
-    box: s.object({
-      kind: s.literal("box"),
-      width: s.number({ finite: true, default: 1 }),
-      height: s.number({ finite: true, default: 1 }),
-      depth: s.number({ finite: true, default: 1 }),
-    }),
-    sphere: s.object({
-      kind: s.literal("sphere"),
-      radius: s.number({ finite: true, default: 0.5 }),
-      widthSegments: s.number({ integer: true, default: 32 }),
-      heightSegments: s.number({ integer: true, default: 16 }),
-    }),
-    plane: s.object({
-      kind: s.literal("plane"),
-      width: s.number({ finite: true, default: 1 }),
-      height: s.number({ finite: true, default: 1 }),
-    }),
+export const ModelVisual = defineSchema(
+  s.object({
+    asset: assetRef("glb", { hidden: ["sub", "options"] }),
   })
 );
 
@@ -147,13 +145,6 @@ export const LoadingState = defineSchema(
   })
 );
 
-export const MeshMaterial = defineSchema(
-  s.object({
-    texture: assetRef("texture", { hidden: ["sub", "options"] }),
-    color: colorTuple,
-  })
-);
-
 export const renderingResources = {
   LoadingState,
 } as const;
@@ -167,13 +158,12 @@ export const Meta = defineSchema(
 export const renderingRegistry = {
   Meta,
   Transform3D,
-  VisualRenderer,
-  Geometry,
+  MeshVisual,
+  ModelVisual,
   Spin,
   DirectionalLight,
   AmbientLight,
   PointLight,
   SpotLight,
   Background,
-  MeshMaterial,
 } as const;

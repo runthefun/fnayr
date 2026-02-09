@@ -77,18 +77,10 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     rotation: [0, 0, 0, 1],
     scale: [1, 1, 1],
   });
-  world.setComponent(box, "VisualRenderer", {
-    kind: "mesh",
-  });
-  world.setComponent(box, "Geometry", {
-    kind: "box",
-    width: 1,
-    height: 1,
-    depth: 1,
-  });
-  world.setComponent(box, "MeshMaterial", {
-    texture: { kind: "asset", type: "texture", uri: "" },
+  world.setComponent(box, "MeshVisual", {
+    geometry: { kind: "box", width: 1, height: 1, depth: 1 },
     color: [0.9, 0.15, 0.15, 1],
+    texture: { kind: "asset", type: "texture", uri: "" },
   });
 
   const ground = world.createEntity();
@@ -98,17 +90,10 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     rotation: [-Math.SQRT1_2, 0, 0, Math.SQRT1_2],
     scale: [10, 10, 1],
   });
-  world.setComponent(ground, "VisualRenderer", {
-    kind: "mesh",
-  });
-  world.setComponent(ground, "Geometry", {
-    kind: "plane",
-    width: 1,
-    height: 1,
-  });
-  world.setComponent(ground, "MeshMaterial", {
-    texture: { kind: "asset", type: "texture", uri: "" },
+  world.setComponent(ground, "MeshVisual", {
+    geometry: { kind: "plane", width: 1, height: 1 },
     color: [0.2, 0.7, 0.2, 1],
+    texture: { kind: "asset", type: "texture", uri: "" },
   });
 
   // Lights as ECS entities

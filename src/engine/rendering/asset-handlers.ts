@@ -12,18 +12,12 @@ type RenderRegistry = typeof renderingRegistry & ComponentRegistry;
 // Concrete data shapes for typed assertions (mirrors schema-derived values)
 type Transform3DData = { position: number[]; rotation: number[]; scale: number[] };
 
-type VisualRendererData =
-  | { kind: "mesh" }
-  | {
-      kind: "model";
-      asset: { type: string; uri: string; sub?: string; options?: Record<string, unknown> };
-    };
-
 type GltfAsset = { gltf: { scene: THREE.Object3D } };
 
-type MeshMaterialData = {
-  texture: { type: string; uri: string; sub?: string; options?: Record<string, unknown> };
+type MeshVisualData = {
+  geometry: unknown;
   color: [number, number, number, number];
+  texture: { type: string; uri: string; sub?: string; options?: Record<string, unknown> };
 };
 
 /* ------------------------------------------------------------------ */
@@ -80,11 +74,7 @@ function instantiateGltf(
 
 export function createModelHandler(): AssetTypeHandler<RenderRegistry, ThreeBinding<RenderRegistry>> {
   return {
-    componentType: "VisualRenderer",
-    filter: (entity, world) => {
-      const vr = world.getComponent(entity, "VisualRenderer") as VisualRendererData | undefined;
-      return vr?.kind === "model";
-    },
+    componentType: "ModelVisual",
     onReady: (entity, asset, slot, world, binding) => {
       instantiateGltf(asset as GltfAsset, slot.sub, entity, world, binding);
     },
@@ -96,7 +86,7 @@ export function createModelHandler(): AssetTypeHandler<RenderRegistry, ThreeBind
 
 export function createTextureHandler(): AssetTypeHandler<RenderRegistry, ThreeBinding<RenderRegistry>> {
   return {
-    componentType: "MeshMaterial",
+    componentType: "MeshVisual",
     onReady: (entity, asset, _slot, _world, binding) => {
       const obj = binding.get(entity);
       if (obj && obj instanceof THREE.Mesh) {
@@ -111,13 +101,13 @@ export function createTextureHandler(): AssetTypeHandler<RenderRegistry, ThreeBi
     onAdded: (entity, world, binding) => {
       const obj = binding.get(entity);
       if (obj && obj instanceof THREE.Mesh) {
-        const meshMat = world.getComponent(entity, "MeshMaterial" as any) as MeshMaterialData | undefined;
-        if (meshMat) {
+        const mv = world.getComponent(entity, "MeshVisual" as any) as MeshVisualData | undefined;
+        if (mv) {
           const mat = obj.material as THREE.MeshStandardMaterial;
-          mat.color.setRGB(meshMat.color[0], meshMat.color[1], meshMat.color[2]);
-          mat.opacity = meshMat.color[3];
+          mat.color.setRGB(mv.color[0], mv.color[1], mv.color[2]);
+          mat.opacity = mv.color[3];
           const wasTransparent = mat.transparent;
-          mat.transparent = meshMat.color[3] < 1;
+          mat.transparent = mv.color[3] < 1;
           if (mat.transparent !== wasTransparent) mat.needsUpdate = true;
         }
       }
@@ -125,13 +115,13 @@ export function createTextureHandler(): AssetTypeHandler<RenderRegistry, ThreeBi
     onUpdated: (entity, world, binding) => {
       const obj = binding.get(entity);
       if (obj && obj instanceof THREE.Mesh) {
-        const meshMat = world.getComponent(entity, "MeshMaterial" as any) as MeshMaterialData | undefined;
-        if (meshMat) {
+        const mv = world.getComponent(entity, "MeshVisual" as any) as MeshVisualData | undefined;
+        if (mv) {
           const mat = obj.material as THREE.MeshStandardMaterial;
-          mat.color.setRGB(meshMat.color[0], meshMat.color[1], meshMat.color[2]);
-          mat.opacity = meshMat.color[3];
+          mat.color.setRGB(mv.color[0], mv.color[1], mv.color[2]);
+          mat.opacity = mv.color[3];
           const wasTransparent = mat.transparent;
-          mat.transparent = meshMat.color[3] < 1;
+          mat.transparent = mv.color[3] < 1;
           if (mat.transparent !== wasTransparent) mat.needsUpdate = true;
         }
       }

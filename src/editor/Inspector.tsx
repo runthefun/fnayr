@@ -56,7 +56,7 @@ export function Inspector() {
     } else {
       const type = raw.slice(0, sepIdx) as ComponentKey;
       const variant = raw.slice(sepIdx + 2);
-      const schema = world.registry[type] as TaggedUnionSchema;
+      const schema = world.registry[type] as unknown as TaggedUnionSchema;
       const variantSchema = schema.variants[variant];
       world.setComponent(selectedEntity!, type, getDefault(variantSchema) as never);
     }
