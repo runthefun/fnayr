@@ -4,10 +4,10 @@ import { CommandBuffer } from "../engine/ecs/commands";
 import { Hierarchy } from "../engine/ecs/hierarchy";
 import { renderingRegistry, renderingResources } from "../engine/rendering/components";
 import { ThreeBinding } from "../engine/rendering/binding";
-import { createRenderSyncSystem, createTransformSyncSystem, createAssetRequestSystem, createModelResolveSystem } from "../engine/rendering/systems";
+import { createRenderSyncSystem, createTransformSyncSystem, createAssetRequestSystem, createModelResolveSystem, createTextureResolveSystem } from "../engine/rendering/systems";
 import type { SlotEntry } from "../engine/rendering/systems";
 import { createLightSyncSystem, createBackgroundSyncSystem } from "../engine/rendering/lights";
-import { GltfAssetLoader } from "../engine/rendering/loaders";
+import { GltfAssetLoader, TextureAssetLoader } from "../engine/rendering/loaders";
 import { AssetManager } from "../engine/assets";
 import { EDITOR_LAYER } from "../engine/rendering/constants";
 import { EditorStore } from "./EditorStore";
@@ -45,6 +45,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   // Asset pipeline
   const assetManager = new AssetManager();
   assetManager.registerLoader("glb", new GltfAssetLoader());
+  assetManager.registerLoader("texture", new TextureAssetLoader());
   const slots: Map<string, SlotEntry> = new Map();
 
   const gizmo = new GizmoManager(world, binding, store, camera, canvas);
@@ -54,6 +55,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   const renderSync = createRenderSyncSystem(binding);
   const assetRequestSync = createAssetRequestSystem(assetManager, slots, renderingRegistry);
   const modelResolveSync = createModelResolveSystem(assetManager, binding, slots);
+  const textureResolveSync = createTextureResolveSystem(assetManager, binding, slots);
   const lightSync = createLightSyncSystem(binding.scene, binding);
   const backgroundSync = createBackgroundSyncSystem(binding.scene);
   const transformSync = createTransformSyncSystem(binding, {
@@ -75,6 +77,9 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   world.setComponent(box, "VisualRenderer", {
     kind: "mesh",
     geometry: "box",
+  });
+  world.setComponent(box, "MeshMaterial", {
+    texture: { kind: "asset", type: "texture", uri: "" },
     color: [0.9, 0.15, 0.15, 1],
   });
 
@@ -87,6 +92,9 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   world.setComponent(ground, "VisualRenderer", {
     kind: "mesh",
     geometry: "plane",
+  });
+  world.setComponent(ground, "MeshMaterial", {
+    texture: { kind: "asset", type: "texture", uri: "" },
     color: [0.2, 0.7, 0.2, 1],
   });
 
@@ -119,6 +127,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   renderSync(world, 0, commands);
   assetRequestSync(world as any, 0, commands as any);
   modelResolveSync(world as any, 0, commands as any);
+  textureResolveSync(world as any, 0, commands as any);
   lightSync(world, 0, commands);
   backgroundSync(world, 0, commands);
   transformSync(world, 0, commands);
@@ -138,6 +147,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     renderSync(world, 0, commands);
     assetRequestSync(world as any, 0, commands as any);
     modelResolveSync(world as any, 0, commands as any);
+    textureResolveSync(world as any, 0, commands as any);
     lightSync(world, 0, commands);
     backgroundSync(world, 0, commands);
     transformSync(world, 0, commands);
