@@ -17,8 +17,12 @@ type Transform3DData = { position: number[]; rotation: number[]; scale: number[]
 
 type MeshData = {
   kind: "mesh";
-  geometry: "box" | "sphere" | "plane";
 };
+
+type GeometryData =
+  | { kind: "box"; width: number; height: number; depth: number }
+  | { kind: "sphere"; radius: number; widthSegments: number; heightSegments: number }
+  | { kind: "plane"; width: number; height: number };
 
 type ModelData = {
   kind: "model";
@@ -41,15 +45,16 @@ export type SlotEntry = {
 };
 
 function createGeometry(
-  type: "box" | "sphere" | "plane"
+  geo?: GeometryData
 ): THREE.BufferGeometry {
-  switch (type) {
+  if (!geo) return new THREE.BoxGeometry();
+  switch (geo.kind) {
     case "box":
-      return new THREE.BoxGeometry();
+      return new THREE.BoxGeometry(geo.width, geo.height, geo.depth);
     case "sphere":
-      return new THREE.SphereGeometry(0.5, 32, 16);
+      return new THREE.SphereGeometry(geo.radius, geo.widthSegments, geo.heightSegments);
     case "plane":
-      return new THREE.PlaneGeometry(1, 1);
+      return new THREE.PlaneGeometry(geo.width, geo.height);
   }
 }
 
@@ -73,12 +78,13 @@ type MeshMaterialData = {
 };
 
 function createMeshObject<R extends RenderRegistry>(
-  mr: MeshData,
+  _mr: MeshData,
   entity: number,
   world: World<R>,
   binding: ThreeBinding<R>,
 ): void {
-  const geometry = createGeometry(mr.geometry);
+  const geo = world.getComponent(entity, "Geometry" as ComponentType<R>) as GeometryData | undefined;
+  const geometry = createGeometry(geo);
   // Read color from MeshMaterial component if present, else default gray
   const meshMat = world.getComponent(entity, "MeshMaterial" as ComponentType<R>) as MeshMaterialData | undefined;
   const color = meshMat?.color ?? [0.8, 0.8, 0.8, 1.0];
@@ -134,18 +140,6 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
           // Was model (or nothing) — delete old binding and create mesh
           binding.delete(entity);
           createMeshObject(vr, entity, world, binding);
-        } else {
-          // Swap geometry if type changed
-          const currentGeoType =
-            obj.geometry instanceof THREE.BoxGeometry
-              ? "box"
-              : obj.geometry instanceof THREE.SphereGeometry
-                ? "sphere"
-                : "plane";
-          if (currentGeoType !== vr.geometry) {
-            obj.geometry.dispose();
-            obj.geometry = createGeometry(vr.geometry);
-          }
         }
       } else if (vr.kind === "model") {
         const obj = binding.get(entity);
@@ -153,6 +147,31 @@ export function createRenderSyncSystem<R extends RenderRegistry>(
           // Was mesh — delete it (model resolve will handle async load)
           binding.delete(entity);
         }
+      }
+    }
+
+    // 4. Geometry component changes — swap geometry on existing meshes
+    for (const entity of world.getAdded("Geometry" as ComponentType<R>)) {
+      const obj = binding.get(entity);
+      if (obj && obj instanceof THREE.Mesh) {
+        const geo = world.getComponent(entity, "Geometry" as ComponentType<R>) as GeometryData | undefined;
+        obj.geometry.dispose();
+        obj.geometry = createGeometry(geo);
+      }
+    }
+    for (const entity of world.getUpdated("Geometry" as ComponentType<R>)) {
+      const obj = binding.get(entity);
+      if (obj && obj instanceof THREE.Mesh) {
+        const geo = world.getComponent(entity, "Geometry" as ComponentType<R>) as GeometryData | undefined;
+        obj.geometry.dispose();
+        obj.geometry = createGeometry(geo);
+      }
+    }
+    for (const entity of world.getRemoved("Geometry" as ComponentType<R>)) {
+      const obj = binding.get(entity);
+      if (obj && obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        obj.geometry = createGeometry(undefined);
       }
     }
   };

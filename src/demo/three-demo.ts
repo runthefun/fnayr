@@ -167,7 +167,12 @@ world.setComponent(box, "Transform3D", {
 });
 world.setComponent(box, "VisualRenderer", {
   kind: "mesh",
-  geometry: "box",
+});
+world.setComponent(box, "Geometry", {
+  kind: "box",
+  width: 1,
+  height: 1,
+  depth: 1,
 });
 world.setComponent(box, "MeshMaterial", {
   texture: { kind: "asset", type: "texture", uri: "" },
@@ -184,7 +189,11 @@ world.setComponent(ground, "Transform3D", {
 });
 world.setComponent(ground, "VisualRenderer", {
   kind: "mesh",
-  geometry: "plane",
+});
+world.setComponent(ground, "Geometry", {
+  kind: "plane",
+  width: 1,
+  height: 1,
 });
 world.setComponent(ground, "MeshMaterial", {
   texture: { kind: "asset", type: "texture", uri: "" },

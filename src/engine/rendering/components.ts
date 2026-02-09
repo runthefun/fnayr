@@ -57,11 +57,32 @@ export const VisualRenderer = defineSchema(
   s.tagged("kind", {
     mesh: s.object({
       kind: s.literal("mesh"),
-      geometry: s.enum(["box", "sphere", "plane"] as const, { default: "box" }),
     }),
     model: s.object({
       kind: s.literal("model"),
       asset: assetRef("glb", { hidden: ["sub", "options"] }),
+    }),
+  })
+);
+
+export const Geometry = defineSchema(
+  s.tagged("kind", {
+    box: s.object({
+      kind: s.literal("box"),
+      width: s.number({ finite: true, default: 1 }),
+      height: s.number({ finite: true, default: 1 }),
+      depth: s.number({ finite: true, default: 1 }),
+    }),
+    sphere: s.object({
+      kind: s.literal("sphere"),
+      radius: s.number({ finite: true, default: 0.5 }),
+      widthSegments: s.number({ integer: true, default: 32 }),
+      heightSegments: s.number({ integer: true, default: 16 }),
+    }),
+    plane: s.object({
+      kind: s.literal("plane"),
+      width: s.number({ finite: true, default: 1 }),
+      height: s.number({ finite: true, default: 1 }),
     }),
   })
 );
@@ -140,6 +161,7 @@ export const renderingResources = {
 export const renderingRegistry = {
   Transform3D,
   VisualRenderer,
+  Geometry,
   Spin,
   DirectionalLight,
   AmbientLight,

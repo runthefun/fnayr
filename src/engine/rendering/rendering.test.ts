@@ -101,7 +101,8 @@ describe("Rendering bridge", () => {
     let entities: number[];
     frame(() => {
       entities = world.spawn(3, {
-        VisualRenderer: { kind: "mesh", geometry: "box" },
+        VisualRenderer: { kind: "mesh" },
+        Geometry: { kind: "box", width: 1, height: 1, depth: 1 },
         Transform3D: (i: number) => ({
           position: [i * 2, 0, 0] as [number, number, number],
           rotation: [0, 0, 0, 1] as [number, number, number, number],
@@ -148,7 +149,12 @@ describe("Rendering bridge", () => {
     frame(() => {
       world.setComponent(entity, "VisualRenderer", {
         kind: "mesh",
-        geometry: "box",
+      });
+      world.setComponent(entity, "Geometry", {
+        kind: "box",
+        width: 1,
+        height: 1,
+        depth: 1,
       });
       world.setComponent(entity, "MeshMaterial", {
         texture: { kind: "asset", type: "texture", uri: "" },
@@ -203,7 +209,12 @@ describe("Rendering bridge", () => {
     frame(() => {
       world.setComponent(entity, "VisualRenderer", {
         kind: "mesh",
-        geometry: "box",
+      });
+      world.setComponent(entity, "Geometry", {
+        kind: "box",
+        width: 1,
+        height: 1,
+        depth: 1,
       });
     });
 
@@ -211,8 +222,12 @@ describe("Rendering bridge", () => {
     expect(mesh.geometry).toBeInstanceOf(THREE.BoxGeometry);
 
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer")!;
-      if (mr.kind === "mesh") mr.geometry = "sphere";
+      world.setComponent(entity, "Geometry", {
+        kind: "sphere",
+        radius: 0.5,
+        widthSegments: 32,
+        heightSegments: 16,
+      });
     });
 
     expect(mesh.geometry).toBeInstanceOf(THREE.SphereGeometry);
@@ -225,7 +240,12 @@ describe("Rendering bridge", () => {
     frame(() => {
       world.setComponent(entity, "VisualRenderer", {
         kind: "mesh",
-        geometry: "box",
+      });
+      world.setComponent(entity, "Geometry", {
+        kind: "box",
+        width: 1,
+        height: 1,
+        depth: 1,
       });
     });
 
