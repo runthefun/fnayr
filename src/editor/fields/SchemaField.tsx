@@ -19,6 +19,7 @@ import { ObjectField } from "./ObjectField";
 import { TagField } from "./TagField";
 import { TaggedUnionField } from "./TaggedUnionField";
 import { EulerField } from "./EulerField";
+import { AssetRefField } from "./AssetRefField";
 
 type Props = {
   value: unknown;
@@ -144,14 +145,25 @@ export function SchemaField({ value, schema, onChange }: Props) {
       );
     }
 
-    case "object":
+    case "object": {
+      const objSchema = schema as ObjectSchema;
+      if (objSchema.meta?.kind === "assetRef") {
+        return (
+          <AssetRefField
+            value={value as Record<string, unknown>}
+            schema={objSchema}
+            onChange={onChange as (v: Record<string, unknown>) => void}
+          />
+        );
+      }
       return (
         <ObjectField
           value={value as Record<string, unknown>}
-          schema={schema as ObjectSchema}
+          schema={objSchema}
           onChange={onChange as (v: Record<string, unknown>) => void}
         />
       );
+    }
 
     case "taggedUnion":
       return (
