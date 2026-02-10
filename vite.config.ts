@@ -5,6 +5,18 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
+  server: {
+    watch: {
+      // Don't reload when assets are imported into public/
+      ignored: [
+        "**/public/textures/**",
+        "**/public/models/**",
+        "**/public/videos/**",
+        "**/public/audio/**",
+        "**/public/assets/**",
+      ],
+    },
+  },
   build: {
     rollupOptions: {
       input: {

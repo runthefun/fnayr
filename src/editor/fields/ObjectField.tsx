@@ -9,12 +9,12 @@ type Props = {
 
 export function ObjectField({ value, schema, onChange }: Props) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       {Object.entries(schema.properties)
         .filter(([, propSchema]) => propSchema.type !== "literal" && !propSchema.meta?.hidden)
         .map(([key, propSchema]) => (
           <div key={key}>
-            <div className="text-muted text-[10px] mb-0.5">{key}</div>
+            <div className="text-muted text-label mb-0.5 font-medium">{key}</div>
             <SchemaField
               value={value[key]}
               schema={propSchema as SchemaLike}

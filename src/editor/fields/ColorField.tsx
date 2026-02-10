@@ -16,26 +16,29 @@ export function ColorField({ value, schema, onChange }: Props) {
   const hex = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 
   return (
-    <div className="flex items-center gap-1.5">
-      <input
-        type="color"
-        value={hex}
-        onChange={(e) => {
-          const h = e.target.value;
-          const nr = parseInt(h.slice(1, 3), 16) / 255;
-          const ng = parseInt(h.slice(3, 5), 16) / 255;
-          const nb = parseInt(h.slice(5, 7), 16) / 255;
-          if (hasAlpha) {
-            onChange([nr, ng, nb, value[3]]);
-          } else {
-            onChange([nr, ng, nb]);
-          }
-        }}
-        className="w-6 h-6 rounded border border-subtle cursor-pointer bg-transparent p-0 shrink-0"
-      />
+    <div className="flex items-center gap-2">
+      <div className="relative">
+        <input
+          type="color"
+          value={hex}
+          onChange={(e) => {
+            const h = e.target.value;
+            const nr = parseInt(h.slice(1, 3), 16) / 255;
+            const ng = parseInt(h.slice(3, 5), 16) / 255;
+            const nb = parseInt(h.slice(5, 7), 16) / 255;
+            if (hasAlpha) {
+              onChange([nr, ng, nb, value[3]]);
+            } else {
+              onChange([nr, ng, nb]);
+            }
+          }}
+          className="w-7 h-7 rounded border border-subtle cursor-pointer bg-transparent p-0 shrink-0"
+        />
+      </div>
+      <span className="text-muted font-mono text-label shrink-0 select-none">{hex}</span>
       {hasAlpha && (
         <>
-          <span className="text-muted text-[10px] shrink-0">A</span>
+          <span className="text-muted text-label shrink-0 font-mono">A</span>
           <input
             type="range"
             value={value[3]}
@@ -46,9 +49,9 @@ export function ColorField({ value, schema, onChange }: Props) {
               const v = parseFloat(e.target.value);
               if (!isNaN(v)) onChange([value[0], value[1], value[2], v]);
             }}
-            className="flex-1 min-w-0 accent-blue-500"
+            className="flex-1 min-w-0"
           />
-          <span className="text-muted text-[10px] w-6 text-right shrink-0">
+          <span className="text-muted font-mono text-label w-7 text-right shrink-0">
             {Math.round(value[3] * 100)}%
           </span>
         </>

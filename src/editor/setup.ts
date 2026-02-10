@@ -13,6 +13,9 @@ import { EDITOR_LAYER } from "../engine/rendering/constants";
 import { EditorStore } from "./EditorStore";
 import { GizmoManager } from "./GizmoManager";
 import { EditorCameraControls } from "./EditorCameraControls";
+import { ProjectFolder } from "./ProjectFolder";
+import { AssetUriResolver } from "./AssetUriResolver";
+import { ThumbnailCache } from "./ThumbnailCache";
 
 type Registry = typeof renderingRegistry;
 
@@ -25,6 +28,9 @@ export type EditorSession = {
   controls: EditorCameraControls;
   renderer: THREE.WebGLRenderer;
   camera: THREE.PerspectiveCamera;
+  projectFolder: ProjectFolder;
+  resolver: AssetUriResolver;
+  thumbnailCache: ThumbnailCache;
   dispose: () => void;
 };
 
@@ -42,10 +48,16 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   const hierarchy = new Hierarchy(world);
   const store = new EditorStore(world);
 
+  // Project folder + URI resolver + thumbnail cache
+  const projectFolder = new ProjectFolder();
+  const resolver = new AssetUriResolver(projectFolder);
+  const thumbnailCache = new ThumbnailCache(projectFolder);
+
   // Asset pipeline
   const assetManager = new AssetManager();
   assetManager.registerLoader("glb", new GltfAssetLoader());
   assetManager.registerLoader("texture", new TextureAssetLoader());
+  assetManager.uriResolver = (uri) => resolver.resolve(uri);
   const slots: Map<string, SlotEntry> = new Map();
 
   const gizmo = new GizmoManager(world, binding, store, camera, canvas);
@@ -164,13 +176,17 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     controls.dispose();
     gizmo.dispose();
     store.dispose();
+    resolver.dispose();
     assetManager.dispose();
     binding.dispose();
     renderer.dispose();
   }
 
   // Expose for devtools inspection
-  (window as any).__editor = { world, binding, hierarchy, store, gizmo, controls, renderer, camera, assetManager, slots };
+  (window as any).__editor = { world, binding, hierarchy, store, gizmo, controls, renderer, camera, assetManager, slots, projectFolder, resolver, thumbnailCache };
 
-  return { world, binding, hierarchy, store, gizmo, controls, renderer, camera, dispose };
+  // Restore project folder from IndexedDB (fire and forget)
+  projectFolder.restore();
+
+  return { world, binding, hierarchy, store, gizmo, controls, renderer, camera, projectFolder, resolver, thumbnailCache, dispose };
 }

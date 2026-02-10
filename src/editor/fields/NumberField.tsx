@@ -88,7 +88,7 @@ export function NumberField({ label, value, schema, onChange }: Props) {
 
   return (
     <label className="flex items-center gap-2">
-      {label && <span className="text-muted w-8 text-right shrink-0">{label}</span>}
+      {label && <span className="text-muted w-8 text-right shrink-0 text-label">{label}</span>}
       {hasRange && (
         <input
           type="range"
@@ -100,7 +100,7 @@ export function NumberField({ label, value, schema, onChange }: Props) {
             const v = parseFloat(e.target.value);
             if (!isNaN(v)) onChange(v);
           }}
-          className="flex-1 min-w-0 accent-blue-500"
+          className="flex-1 min-w-0"
         />
       )}
       {editing ? (
@@ -117,7 +117,7 @@ export function NumberField({ label, value, schema, onChange }: Props) {
             if (e.key === "Enter") commitEdit();
             if (e.key === "Escape") setEditing(false);
           }}
-          className={`bg-input border border-subtle rounded px-1.5 py-0.5 text-primary outline-none focus:border-focus ${hasRange ? "w-16 shrink-0" : "w-full"}`}
+          className={`bg-input border border-accent/40 rounded px-1.5 py-0.5 text-primary outline-none font-mono text-body ${hasRange ? "w-16 shrink-0" : "w-full"}`}
         />
       ) : (
         <span
@@ -132,7 +132,7 @@ export function NumberField({ label, value, schema, onChange }: Props) {
               setEditing(true);
             }
           }}
-          className={`bg-input border border-subtle rounded px-1.5 py-0.5 text-primary cursor-ew-resize select-none truncate text-sm focus:border-focus outline-none ${hasRange ? "w-16 shrink-0" : "w-full"}`}
+          className={`bg-input border border-subtle rounded px-1.5 py-0.5 text-primary cursor-ew-resize select-none truncate font-mono text-body hover:border-border focus:border-focus outline-none ${hasRange ? "w-16 shrink-0" : "w-full"}`}
         >
           {format(value)}
         </span>

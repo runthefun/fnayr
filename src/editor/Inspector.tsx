@@ -21,16 +21,16 @@ export function Inspector() {
 
   if (selectedEntity === null) {
     return (
-      <div className="p-3 text-muted text-center">
-        No entity selected
+      <div className="flex flex-col items-center justify-center h-full gap-1 text-muted">
+        <span className="text-label">No entity selected</span>
       </div>
     );
   }
 
   if (!world.isAlive(selectedEntity)) {
     return (
-      <div className="p-3 text-muted text-center">
-        Entity not alive
+      <div className="flex flex-col items-center justify-center h-full gap-1 text-muted">
+        <span className="text-label">Entity not alive</span>
       </div>
     );
   }
@@ -68,26 +68,31 @@ export function Inspector() {
 
   return (
     <div>
-      <div className="px-2 py-1.5 text-muted font-medium uppercase tracking-wider text-[10px] border-b border-subtle">
-        Inspector — Entity {selectedEntity}
+      {/* Panel header */}
+      <div className="px-3 py-2 text-muted font-medium uppercase tracking-widest text-header border-b border-subtle flex items-center gap-2">
+        <span>Inspector</span>
+        <span className="text-header font-mono text-muted/60 font-normal normal-case tracking-normal">#{selectedEntity}</span>
       </div>
+
       {componentTypes.map((type) => {
         const schema = world.registry[type] as SchemaLike;
         const data = world.getComponent(selectedEntity, type);
+        const isCollapsed = collapsed[type];
 
         return (
           <div key={type} className="border-b border-subtle">
+            {/* Component header */}
             <div
-              className="px-2 py-1.5 bg-surface text-primary font-medium text-[11px] flex items-center justify-between cursor-pointer select-none"
+              className="px-3 py-1.5 bg-surface/50 text-primary text-body flex items-center justify-between cursor-pointer select-none hover:bg-surface"
               onClick={() =>
                 setCollapsed((prev) => ({ ...prev, [type]: !prev[type] }))
               }
             >
-              <span className="flex items-center gap-1">
-                {collapsed[type] ? (
-                  <ChevronRight size={12} />
+              <span className="flex items-center gap-1.5 font-medium">
+                {isCollapsed ? (
+                  <ChevronRight size={11} strokeWidth={2} className="text-muted" />
                 ) : (
-                  <ChevronDown size={12} />
+                  <ChevronDown size={11} strokeWidth={2} className="text-muted" />
                 )}
                 {type}
               </span>
@@ -96,14 +101,14 @@ export function Inspector() {
                   e.stopPropagation();
                   handleRemoveComponent(type);
                 }}
-                className="text-muted hover:text-primary text-[10px] cursor-pointer"
+                className="text-muted hover:text-danger cursor-pointer p-0.5 rounded hover:bg-danger-dim"
                 title={`Remove ${type}`}
               >
-                <X size={12} />
+                <X size={11} strokeWidth={2} />
               </button>
             </div>
-            {!collapsed[type] && (
-              <div className="px-2 py-1.5">
+            {!isCollapsed && (
+              <div className="px-3 py-2">
                 <SchemaField
                   value={data}
                   schema={schema}
@@ -116,15 +121,16 @@ export function Inspector() {
           </div>
         );
       })}
+
       {availableComponents.length > 0 && (
-        <div className="px-2 py-2 border-b border-subtle">
+        <div className="px-3 py-2.5">
           <select
             onChange={handleAddComponent}
             value=""
-            className="w-full bg-surface text-primary text-[11px] px-2 py-1 border border-subtle rounded cursor-pointer outline-none focus:border-focus"
+            className="w-full bg-surface text-secondary text-body px-2 py-1.5 border border-subtle rounded cursor-pointer outline-none focus:border-focus hover:border-border"
           >
             <option value="" disabled>
-              Add Component...
+              + Add Component...
             </option>
             {availableComponents.map((type) => {
               const schema = world.registry[type] as SchemaLike;

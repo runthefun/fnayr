@@ -1,6 +1,6 @@
 import { useRef } from "react";
-import { Save, SaveAll, FolderOpen, Focus } from "lucide-react";
-import { useEditor, useSelectedEntity } from "./useEditor";
+import { Save, SaveAll, FolderOpen, Focus, FolderRoot, FolderSync } from "lucide-react";
+import { useEditor, useSelectedEntity, useProjectFolder } from "./useEditor";
 import { worldToJson } from "../engine/ecs/bridge";
 import { parseWorld } from "../engine/world";
 import { renderingRegistry } from "../engine/rendering/components";
@@ -8,9 +8,44 @@ import type { ComponentType, ComponentData } from "../engine/ecs/types";
 
 type Registry = typeof renderingRegistry;
 
+function ToolbarButton({
+  onClick,
+  disabled,
+  title,
+  active,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  title: string;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`
+        p-1.5 rounded text-secondary hover:text-primary hover:bg-surface
+        disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-secondary
+        cursor-pointer
+        ${active ? "bg-accent-dim text-accent ring-1 ring-accent/40" : ""}
+      `}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ToolbarSeparator() {
+  return <div className="w-px h-4 bg-subtle mx-0.5" />;
+}
+
 export function Toolbar() {
   const { store, world, hierarchy, binding, controls } = useEditor();
   const selectedEntity = useSelectedEntity();
+  const projectFolder = useProjectFolder();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileHandleRef = useRef<any>(null);
 
@@ -167,40 +202,44 @@ export function Toolbar() {
   }
 
   return (
-    <div className="flex gap-1 px-2 py-1.5 border-b border-subtle bg-panel overflow-x-auto">
-      <button
-        onClick={handleSave}
-        className="p-1 bg-surface hover:bg-subtle text-primary rounded border border-subtle"
-        title="Save"
-      >
-        <Save size={14} />
-      </button>
-      <button
-        onClick={handleSaveAs}
-        className="p-1 bg-surface hover:bg-subtle text-primary rounded border border-subtle"
-        title="Save As"
-      >
-        <SaveAll size={14} />
-      </button>
-      <button
-        onClick={handleLoad}
-        className="p-1 bg-surface hover:bg-subtle text-primary rounded border border-subtle"
-        title="Load"
-      >
-        <FolderOpen size={14} />
-      </button>
-      <button
+    <div className="flex items-center gap-0.5">
+      <ToolbarButton onClick={handleSave} title="Save (Ctrl+S)">
+        <Save size={14} strokeWidth={1.75} />
+      </ToolbarButton>
+      <ToolbarButton onClick={handleSaveAs} title="Save As...">
+        <SaveAll size={14} strokeWidth={1.75} />
+      </ToolbarButton>
+      <ToolbarButton onClick={handleLoad} title="Open Scene...">
+        <FolderOpen size={14} strokeWidth={1.75} />
+      </ToolbarButton>
+      <ToolbarSeparator />
+      <ToolbarButton
         onClick={() => {
           if (selectedEntity == null) return;
           const obj = binding.get(selectedEntity);
           if (obj) controls.focusOnObject(obj);
         }}
         disabled={selectedEntity == null}
-        className="p-1 bg-surface hover:bg-subtle text-primary rounded border border-subtle disabled:opacity-40 disabled:cursor-default"
-        title="Focus"
+        title="Focus Selected (F)"
       >
-        <Focus size={14} />
-      </button>
+        <Focus size={14} strokeWidth={1.75} />
+      </ToolbarButton>
+      <ToolbarSeparator />
+      <ToolbarButton
+        onClick={() => projectFolder.open()}
+        title={projectFolder.isOpen ? `Project: ${projectFolder.name} (${projectFolder.assetRootName}/)` : "Open Project Folder"}
+        active={projectFolder.isOpen}
+      >
+        <FolderRoot size={14} strokeWidth={1.75} />
+      </ToolbarButton>
+      {projectFolder.isOpen && (
+        <ToolbarButton
+          onClick={() => projectFolder.open()}
+          title="Change Project Folder"
+        >
+          <FolderSync size={14} strokeWidth={1.75} />
+        </ToolbarButton>
+      )}
       <input
         ref={fileInputRef}
         type="file"

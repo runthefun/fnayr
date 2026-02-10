@@ -18,3 +18,15 @@ export function useEntities(): number {
   const { store } = useEditor();
   return useSyncExternalStore(store.subscribeEntities, store.getEntitySnapshot);
 }
+
+export function useProjectFolder() {
+  const { projectFolder } = useEditor();
+  useSyncExternalStore(projectFolder.subscribe, projectFolder.getSnapshot);
+  return projectFolder;
+}
+
+export function useThumbnailCache() {
+  const { thumbnailCache } = useEditor();
+  useSyncExternalStore(thumbnailCache.subscribe, thumbnailCache.getSnapshot);
+  return thumbnailCache;
+}
