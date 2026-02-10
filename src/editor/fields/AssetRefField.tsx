@@ -23,6 +23,7 @@ export function AssetRefField({ value, schema, onChange }: Props) {
   const thumbnailCache = useThumbnailCache();
   const [dragOver, setDragOver] = useState(false);
   const [typeWarning, setTypeWarning] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const assetType = value.type as string | undefined;
   const accept = assetType ? acceptByType[assetType] : undefined;
@@ -94,6 +95,29 @@ export function AssetRefField({ value, schema, onChange }: Props) {
     }
   };
 
+  function isExternalUrl(s: string): boolean {
+    return s.startsWith("http://") || s.startsWith("https://");
+  }
+
+  const importExternalUrl = async (url: string) => {
+    if (!isExternalUrl(url) || !projectFolder.isOpen) return;
+    setImporting(true);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+      const blob = await res.blob();
+      const filename = url.split("/").pop()?.split("?")[0] || "asset";
+      const file = new File([blob], filename, { type: blob.type });
+      checkTypeWarning(filename);
+      const relativePath = await projectFolder.importFile(file);
+      onChange({ ...value, uri: relativePath });
+    } catch (err) {
+      console.warn("Failed to import external URL:", err);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const uri = (value.uri as string) ?? "";
   const thumb = uri && projectFolder.isOpen ? thumbnailCache.getThumbnail(uri) : null;
 
@@ -114,9 +138,14 @@ export function AssetRefField({ value, schema, onChange }: Props) {
           <input
             type="text"
             value={uri}
+            disabled={importing}
             onChange={(e) => {
               setTypeWarning(null);
               onChange({ ...value, uri: e.target.value });
+            }}
+            onBlur={() => importExternalUrl(uri)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") importExternalUrl(uri);
             }}
             className="bg-input border border-subtle rounded px-1.5 py-1 w-full text-primary outline-none focus:border-focus hover:border-border min-w-0 text-body"
           />
@@ -135,6 +164,9 @@ export function AssetRefField({ value, schema, onChange }: Props) {
             className="hidden"
           />
         </div>
+        {importing && (
+          <div className="text-accent text-label mt-1">Importing...</div>
+        )}
         {typeWarning && (
           <div className="text-amber-400 text-label mt-1">{typeWarning}</div>
         )}

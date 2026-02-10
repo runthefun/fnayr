@@ -8,7 +8,17 @@ import { EntityTree } from "./EntityTree";
 import { Inspector } from "./Inspector";
 import { AssetBrowser } from "./AssetBrowser";
 import { ThemeTweakerButton, ThemeTweakerPanel } from "./ThemeTweaker";
+import { useSceneName } from "./useEditor";
 import { Sun, Moon } from "lucide-react";
+
+function SceneLabel() {
+  const sceneName = useSceneName();
+  return (
+    <span className="text-label text-muted">
+      {sceneName ?? "Untitled"}
+    </span>
+  );
+}
 
 type Theme = "dark" | "light";
 
@@ -65,7 +75,7 @@ export function EditorApp() {
               <span className="text-header font-semibold text-editor-bg tracking-tight">F</span>
             </div>
             <span className="text-body font-medium text-secondary tracking-wide">FNAYR</span>
-            <span className="text-label text-muted">Editor</span>
+            <SceneLabel />
             <div className="w-px h-4 bg-subtle mx-0.5" />
             <ThemeTweakerButton open={themePanelOpen} onToggle={() => setThemePanelOpen(!themePanelOpen)} />
             <button

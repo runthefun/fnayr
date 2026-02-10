@@ -25,6 +25,12 @@ export function useProjectFolder() {
   return projectFolder;
 }
 
+export function useSceneName(): string | null {
+  const { store } = useEditor();
+  useSyncExternalStore(store.subscribeScene, store.getSceneSnapshot);
+  return store.getSceneName();
+}
+
 export function useThumbnailCache() {
   const { thumbnailCache } = useEditor();
   useSyncExternalStore(thumbnailCache.subscribe, thumbnailCache.getSnapshot);

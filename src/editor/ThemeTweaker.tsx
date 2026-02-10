@@ -54,9 +54,9 @@ const TOKEN_GROUPS: TokenGroup[] = [
   {
     label: "Typography",
     tokens: [
-      { var: "--text-header", label: "Header", darkDefault: "9",  lightDefault: "9",  type: "px" },
-      { var: "--text-label",  label: "Label",  darkDefault: "10", lightDefault: "10", type: "px" },
-      { var: "--text-body",   label: "Body",   darkDefault: "11", lightDefault: "11", type: "px" },
+      { var: "--text-header", label: "Header", darkDefault: "11",  lightDefault: "11",  type: "px" },
+      { var: "--text-label",  label: "Label",  darkDefault: "13", lightDefault: "13", type: "px" },
+      { var: "--text-body",   label: "Body",   darkDefault: "14", lightDefault: "14", type: "px" },
     ],
   },
   {

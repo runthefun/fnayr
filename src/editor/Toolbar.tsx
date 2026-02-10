@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Save, SaveAll, FolderOpen, Focus, FolderRoot, FolderSync } from "lucide-react";
 import { useEditor, useSelectedEntity, useProjectFolder } from "./useEditor";
 import { worldToJson } from "../engine/ecs/bridge";
@@ -46,7 +46,24 @@ export function Toolbar() {
   const { store, world, hierarchy, binding, controls } = useEditor();
   const selectedEntity = useSelectedEntity();
   const projectFolder = useProjectFolder();
-  const sceneIdRef = useRef<string | null>(null);
+
+  const didAutoLoad = useRef(false);
+  useEffect(() => {
+    if (didAutoLoad.current) return;
+    didAutoLoad.current = true;
+    const lastId = store.getLastSceneId();
+    if (lastId) {
+      openSceneById(lastId).catch(() => {});
+    }
+  }, []);
+
+  async function openSceneById(id: string) {
+    const res = await fetch(`/api/scenes/${id}`);
+    if (!res.ok) return;
+    const scene = await res.json();
+    loadScene(scene.data);
+    store.setScene(scene.id, scene.name);
+  }
 
   function getSceneContents() {
     const { json } = worldToJson(renderingRegistry, world, { hierarchy });
@@ -54,13 +71,15 @@ export function Toolbar() {
   }
 
   async function handleSave() {
-    if (sceneIdRef.current) {
+    const sceneId = store.getSceneId();
+    if (sceneId) {
       try {
         const data = getSceneContents();
-        await fetch(`/api/scenes/${sceneIdRef.current}`, {
+        const name = store.getSceneName() ?? "Scene";
+        await fetch(`/api/scenes/${sceneId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: "Scene", data }),
+          body: JSON.stringify({ name, data }),
         });
         return;
       } catch (err) {
@@ -83,7 +102,7 @@ export function Toolbar() {
       });
       if (!res.ok) throw new Error("Failed to create scene");
       const created = await res.json();
-      sceneIdRef.current = created.id;
+      store.setScene(created.id, name);
     } catch (err) {
       console.error("Failed to save scene:", err);
     }
@@ -105,11 +124,7 @@ export function Toolbar() {
       const idx = parseInt(choice, 10) - 1;
       if (isNaN(idx) || idx < 0 || idx >= scenes.length) return;
 
-      const sceneRes = await fetch(`/api/scenes/${scenes[idx].id}`);
-      if (!sceneRes.ok) throw new Error("Failed to fetch scene");
-      const scene = await sceneRes.json();
-      loadScene(scene.data);
-      sceneIdRef.current = scene.id;
+      await openSceneById(scenes[idx].id);
     } catch (err) {
       console.error("Failed to load scene:", err);
     }
