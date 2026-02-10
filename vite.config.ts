@@ -6,14 +6,17 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   server: {
+    proxy: {
+      "/api": "http://localhost:3001",
+    },
     watch: {
-      // Don't reload when assets are imported into public/
       ignored: [
         "**/public/textures/**",
         "**/public/models/**",
         "**/public/videos/**",
         "**/public/audio/**",
         "**/public/assets/**",
+        "**/data/**",
       ],
     },
   },
@@ -26,4 +29,3 @@ export default defineConfig({
     },
   },
 });
-

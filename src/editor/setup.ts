@@ -57,7 +57,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   const assetManager = new AssetManager();
   assetManager.registerLoader("glb", new GltfAssetLoader());
   assetManager.registerLoader("texture", new TextureAssetLoader());
-  assetManager.uriResolver = (uri) => resolver.resolve(uri);
+  assetManager.uriResolver = async (uri) => resolver.resolve(uri);
   const slots: Map<string, SlotEntry> = new Map();
 
   const gizmo = new GizmoManager(world, binding, store, camera, canvas);

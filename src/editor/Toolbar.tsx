@@ -46,111 +46,73 @@ export function Toolbar() {
   const { store, world, hierarchy, binding, controls } = useEditor();
   const selectedEntity = useSelectedEntity();
   const projectFolder = useProjectFolder();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const fileHandleRef = useRef<any>(null);
+  const sceneIdRef = useRef<string | null>(null);
 
   function getSceneContents() {
     const { json } = worldToJson(renderingRegistry, world, { hierarchy });
-    return JSON.stringify(json, null, 2);
-  }
-
-  async function writeToHandle(handle: any, contents: string) {
-    const writable = await handle.createWritable();
-    await writable.write(contents);
-    await writable.close();
+    return json;
   }
 
   async function handleSave() {
-    const contents = getSceneContents();
-
-    if (fileHandleRef.current) {
+    if (sceneIdRef.current) {
       try {
-        await writeToHandle(fileHandleRef.current, contents);
+        const data = getSceneContents();
+        await fetch(`/api/scenes/${sceneIdRef.current}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Scene", data }),
+        });
         return;
-      } catch (err: any) {
-        // Permission revoked or file gone — fall through to Save As
+      } catch (err) {
+        console.error("Failed to save scene:", err);
       }
     }
-
     await handleSaveAs();
   }
 
   async function handleSaveAs() {
-    const contents = getSceneContents();
+    const name = window.prompt("Scene name:", "Untitled Scene");
+    if (!name) return;
 
-    if ("showSaveFilePicker" in window) {
-      try {
-        const handle = await (window as any).showSaveFilePicker({
-          suggestedName: "scene.json",
-          types: [
-            {
-              description: "JSON Scene",
-              accept: { "application/json": [".json"] },
-            },
-          ],
-        });
-        await writeToHandle(handle, contents);
-        fileHandleRef.current = handle;
-        return;
-      } catch (err: any) {
-        if (err.name === "AbortError") return;
-      }
+    try {
+      const data = getSceneContents();
+      const res = await fetch("/api/scenes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, data }),
+      });
+      if (!res.ok) throw new Error("Failed to create scene");
+      const created = await res.json();
+      sceneIdRef.current = created.id;
+    } catch (err) {
+      console.error("Failed to save scene:", err);
     }
-
-    // Fallback: download
-    const blob = new Blob([contents], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "scene.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
   }
 
   async function handleLoad() {
-    if ("showOpenFilePicker" in window) {
-      try {
-        const [handle] = await (window as any).showOpenFilePicker({
-          types: [
-            {
-              description: "JSON Scene",
-              accept: { "application/json": [".json"] },
-            },
-          ],
-        });
-        const file = await handle.getFile();
-        const text = await file.text();
-        const json = JSON.parse(text);
-        loadScene(json);
-        fileHandleRef.current = handle;
+    try {
+      const res = await fetch("/api/scenes");
+      if (!res.ok) throw new Error("Failed to fetch scene list");
+      const scenes: { id: string; name: string }[] = await res.json();
+      if (scenes.length === 0) {
+        window.alert("No saved scenes found.");
         return;
-      } catch (err: any) {
-        if (err.name === "AbortError") return;
       }
+
+      const listStr = scenes.map((s, i) => `${i + 1}. ${s.name}`).join("\n");
+      const choice = window.prompt(`Pick a scene (1-${scenes.length}):\n${listStr}`);
+      if (!choice) return;
+      const idx = parseInt(choice, 10) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= scenes.length) return;
+
+      const sceneRes = await fetch(`/api/scenes/${scenes[idx].id}`);
+      if (!sceneRes.ok) throw new Error("Failed to fetch scene");
+      const scene = await sceneRes.json();
+      loadScene(scene.data);
+      sceneIdRef.current = scene.id;
+    } catch (err) {
+      console.error("Failed to load scene:", err);
     }
-
-    // Fallback: file input
-    fileInputRef.current?.click();
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const json = JSON.parse(reader.result as string);
-        loadScene(json);
-        fileHandleRef.current = null;
-      } catch (err) {
-        console.error("Failed to load scene:", err);
-      }
-    };
-    reader.readAsText(file);
-
-    // Reset the input so the same file can be loaded again
-    e.target.value = "";
   }
 
   function loadScene(json: unknown) {
@@ -227,26 +189,19 @@ export function Toolbar() {
       <ToolbarSeparator />
       <ToolbarButton
         onClick={() => projectFolder.open()}
-        title={projectFolder.isOpen ? `Project: ${projectFolder.name} (${projectFolder.assetRootName}/)` : "Open Project Folder"}
+        title={projectFolder.isOpen ? `Project: ${projectFolder.name} (${projectFolder.assetRootName}/)` : "Connect to Server"}
         active={projectFolder.isOpen}
       >
         <FolderRoot size={14} strokeWidth={1.75} />
       </ToolbarButton>
       {projectFolder.isOpen && (
         <ToolbarButton
-          onClick={() => projectFolder.open()}
-          title="Change Project Folder"
+          onClick={() => projectFolder.close()}
+          title="Disconnect"
         >
           <FolderSync size={14} strokeWidth={1.75} />
         </ToolbarButton>
       )}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json"
-        onChange={handleFileChange}
-        className="hidden"
-      />
     </div>
   );
 }

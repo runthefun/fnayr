@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import type { ObjectSchema, SchemaLike } from "../../engine/schema";
 import { SchemaField } from "./SchemaField";
 import { useProjectFolder, useThumbnailCache } from "../useEditor";
@@ -19,17 +19,10 @@ const acceptByType: Record<string, string> = {
 
 export function AssetRefField({ value, schema, onChange }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const blobUrlRef = useRef<string | null>(null);
   const projectFolder = useProjectFolder();
   const thumbnailCache = useThumbnailCache();
   const [dragOver, setDragOver] = useState(false);
   const [typeWarning, setTypeWarning] = useState<string | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-    };
-  }, []);
 
   const assetType = value.type as string | undefined;
   const accept = assetType ? acceptByType[assetType] : undefined;
@@ -51,20 +44,12 @@ export function AssetRefField({ value, schema, onChange }: Props) {
 
     checkTypeWarning(file.name);
 
-    if (projectFolder.isOpen) {
-      try {
-        const relativePath = await projectFolder.importFile(file);
-        onChange({ ...value, uri: relativePath });
-        return;
-      } catch (err) {
-        console.warn("Failed to import into project folder, falling back to blob URL:", err);
-      }
+    try {
+      const relativePath = await projectFolder.importFile(file);
+      onChange({ ...value, uri: relativePath });
+    } catch (err) {
+      console.warn("Failed to import file:", err);
     }
-
-    if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-    const url = URL.createObjectURL(file);
-    blobUrlRef.current = url;
-    onChange({ ...value, uri: url });
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -100,20 +85,12 @@ export function AssetRefField({ value, schema, onChange }: Props) {
     if (file) {
       checkTypeWarning(file.name);
 
-      if (projectFolder.isOpen) {
-        try {
-          const relativePath = await projectFolder.importFile(file);
-          onChange({ ...value, uri: relativePath });
-          return;
-        } catch (err) {
-          console.warn("Failed to import dropped file:", err);
-        }
+      try {
+        const relativePath = await projectFolder.importFile(file);
+        onChange({ ...value, uri: relativePath });
+      } catch (err) {
+        console.warn("Failed to import dropped file:", err);
       }
-
-      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-      const url = URL.createObjectURL(file);
-      blobUrlRef.current = url;
-      onChange({ ...value, uri: url });
     }
   };
 
