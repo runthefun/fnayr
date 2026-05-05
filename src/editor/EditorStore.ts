@@ -11,8 +11,12 @@ export class EditorStore<
   private selectedEntity: number | null = null;
   private readonly selectionListeners = new Set<() => void>();
   private readonly entityListeners = new Set<() => void>();
+  private readonly sceneListeners = new Set<() => void>();
   private entityVersion = 0;
   private selectionVersion = 0;
+  private sceneVersion = 0;
+  private sceneId: string | null = null;
+  private sceneName: string | null = null;
   private readonly unsubComponentChanged: () => void;
   private readonly unsubEntityDestroyed: () => void;
 
@@ -73,11 +77,49 @@ export class EditorStore<
     };
   };
 
+  getSceneId(): string | null {
+    return this.sceneId;
+  }
+
+  getSceneName(): string | null {
+    return this.sceneName;
+  }
+
+  private static LAST_SCENE_KEY = "editor-last-scene-id";
+
+  setScene(id: string | null, name: string | null): void {
+    this.sceneId = id;
+    this.sceneName = name;
+    if (id) {
+      localStorage.setItem(EditorStore.LAST_SCENE_KEY, id);
+    } else {
+      localStorage.removeItem(EditorStore.LAST_SCENE_KEY);
+    }
+    this.sceneVersion++;
+    this.notifyScene();
+  }
+
+  getLastSceneId(): string | null {
+    return localStorage.getItem(EditorStore.LAST_SCENE_KEY);
+  }
+
+  getSceneSnapshot = (): number => {
+    return this.sceneVersion;
+  };
+
+  subscribeScene = (callback: () => void): (() => void) => {
+    this.sceneListeners.add(callback);
+    return () => {
+      this.sceneListeners.delete(callback);
+    };
+  };
+
   dispose(): void {
     this.unsubComponentChanged();
     this.unsubEntityDestroyed();
     this.selectionListeners.clear();
     this.entityListeners.clear();
+    this.sceneListeners.clear();
   }
 
   private notifySelection(): void {
@@ -88,6 +130,12 @@ export class EditorStore<
 
   private notifyEntities(): void {
     for (const listener of this.entityListeners) {
+      listener();
+    }
+  }
+
+  private notifyScene(): void {
+    for (const listener of this.sceneListeners) {
       listener();
     }
   }

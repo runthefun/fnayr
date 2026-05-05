@@ -27,13 +27,13 @@ export function TaggedUnionField({ value, schema, onChange }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <div>
-        <div className="text-muted text-[10px] mb-0.5">{tagKey}</div>
+        <div className="text-muted text-label mb-0.5 font-medium">{tagKey}</div>
         <select
           value={activeVariant}
           onChange={handleVariantChange}
-          className="w-full bg-surface text-primary text-[11px] px-1.5 py-0.5 border border-subtle rounded cursor-pointer outline-none focus:border-focus"
+          className="w-full bg-input text-primary text-body px-1.5 py-1 border border-subtle rounded cursor-pointer outline-none focus:border-focus hover:border-border"
         >
           {variantKeys.map((v) => (
             <option key={v} value={v}>
@@ -44,7 +44,7 @@ export function TaggedUnionField({ value, schema, onChange }: Props) {
       </div>
       {fieldEntries.map(([key, propSchema]) => (
         <div key={key}>
-          <div className="text-muted text-[10px] mb-0.5">{key}</div>
+          <div className="text-muted text-label mb-0.5 font-medium">{key}</div>
           <SchemaField
             value={value[key]}
             schema={propSchema as SchemaLike}

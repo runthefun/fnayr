@@ -5,6 +5,21 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
+  server: {
+    proxy: {
+      "/api": "http://localhost:3001",
+    },
+    watch: {
+      ignored: [
+        "**/public/textures/**",
+        "**/public/models/**",
+        "**/public/videos/**",
+        "**/public/audio/**",
+        "**/public/assets/**",
+        "**/data/**",
+      ],
+    },
+  },
   build: {
     rollupOptions: {
       input: {
@@ -14,4 +29,3 @@ export default defineConfig({
     },
   },
 });
-

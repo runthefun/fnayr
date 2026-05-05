@@ -140,10 +140,9 @@ const COLORS: [number, number, number, number][] = [
 const colorCycleSystem = (w: World<Registry>) => {
   if (!input.isKeyJustPressed("Space")) return;
   colorIndex = (colorIndex + 1) % COLORS.length;
-  for (const { entity, components } of w.query(["Spin", "VisualRenderer"])) {
-    if (components.VisualRenderer.kind !== "mesh") continue;
-    const mr = w.getMut(entity, "VisualRenderer")! as any;
-    mr.color = COLORS[colorIndex];
+  for (const { entity } of w.query(["Spin", "MeshVisual"])) {
+    const mv = w.getMut(entity, "MeshVisual")! as any;
+    mv.color = COLORS[colorIndex];
   }
 };
 
@@ -166,10 +165,10 @@ world.setComponent(box, "Transform3D", {
   rotation: [0, 0, 0, 1],
   scale: [1, 1, 1],
 });
-world.setComponent(box, "VisualRenderer", {
-  kind: "mesh",
-  geometry: "box",
+world.setComponent(box, "MeshVisual", {
+  geometry: { kind: "box", width: 1, height: 1, depth: 1 },
   color: [0.9, 0.15, 0.15, 1],
+  texture: { kind: "asset", type: "texture", uri: "" },
 });
 world.setComponent(box, "Spin", { speed: 1 });
 
@@ -180,10 +179,10 @@ world.setComponent(ground, "Transform3D", {
   rotation: [-Math.SQRT1_2, 0, 0, Math.SQRT1_2], // rotate -90deg around X
   scale: [10, 10, 1],
 });
-world.setComponent(ground, "VisualRenderer", {
-  kind: "mesh",
-  geometry: "plane",
+world.setComponent(ground, "MeshVisual", {
+  geometry: { kind: "plane", width: 1, height: 1 },
   color: [0.2, 0.7, 0.2, 1],
+  texture: { kind: "asset", type: "texture", uri: "" },
 });
 
 // Run the render sync manually to build the initial scene graph

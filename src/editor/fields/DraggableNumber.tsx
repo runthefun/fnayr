@@ -22,6 +22,13 @@ function format(v: number) {
   return Number.isInteger(v) ? v.toString() : parseFloat(v.toFixed(3)).toString();
 }
 
+const LABEL_COLORS: Record<string, string> = {
+  X: "text-red-400/80",
+  Y: "text-green-400/80",
+  Z: "text-blue-400/80",
+  W: "text-purple-400/80",
+};
+
 export function DraggableNumber({ value, schema, label, onChange, speed = DRAG_SPEED }: DraggableNumberProps) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
@@ -94,10 +101,12 @@ export function DraggableNumber({ value, schema, label, onChange, speed = DRAG_S
     }
   };
 
+  const labelColor = LABEL_COLORS[label] || "text-muted";
+
   if (editing) {
     return (
       <label className="flex items-center gap-0.5 flex-1 min-w-0">
-        <span className="text-muted text-[10px] shrink-0">{label}</span>
+        <span className={`text-label font-mono font-medium shrink-0 w-3 text-center ${labelColor}`}>{label}</span>
         <input
           ref={inputRef}
           type="number"
@@ -111,7 +120,7 @@ export function DraggableNumber({ value, schema, label, onChange, speed = DRAG_S
             if (e.key === "Enter") commitEdit();
             if (e.key === "Escape") setEditing(false);
           }}
-          className="bg-input border border-subtle rounded px-1 py-0.5 w-full text-primary outline-none focus:border-focus min-w-0"
+          className="bg-input border border-accent/40 rounded px-1.5 py-0.5 w-full text-primary outline-none min-w-0 font-mono text-body"
         />
       </label>
     );
@@ -119,7 +128,7 @@ export function DraggableNumber({ value, schema, label, onChange, speed = DRAG_S
 
   return (
     <label className="flex items-center gap-0.5 flex-1 min-w-0">
-      <span className="text-muted text-[10px] shrink-0">{label}</span>
+      <span className={`text-label font-mono font-medium shrink-0 w-3 text-center ${labelColor}`}>{label}</span>
       <span
         tabIndex={0}
         onPointerDown={handlePointerDown}
@@ -132,7 +141,7 @@ export function DraggableNumber({ value, schema, label, onChange, speed = DRAG_S
             setEditing(true);
           }
         }}
-        className="bg-input border border-subtle rounded px-1 py-0.5 w-full text-primary min-w-0 cursor-ew-resize select-none truncate text-sm focus:border-focus outline-none"
+        className="bg-input border border-subtle rounded px-1.5 py-0.5 w-full text-primary min-w-0 cursor-ew-resize select-none truncate font-mono text-body hover:border-border focus:border-focus outline-none"
       >
         {format(value)}
       </span>

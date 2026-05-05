@@ -35,9 +35,9 @@ describe("Hierarchy → Three.js parenting", () => {
     const child = ctx.world.createEntity();
 
     runFrame(ctx, () => {
-      ctx.world.setComponent(parent, "VisualRenderer");
+      ctx.world.setComponent(parent, "MeshVisual");
       ctx.world.setComponent(parent, "Transform3D");
-      ctx.world.setComponent(child, "VisualRenderer");
+      ctx.world.setComponent(child, "MeshVisual");
       ctx.world.setComponent(child, "Transform3D");
       ctx.hierarchy.setParent(child, parent);
     });
@@ -61,11 +61,11 @@ describe("Hierarchy → Three.js parenting", () => {
     const child = ctx.world.createEntity();
 
     runFrame(ctx, () => {
-      ctx.world.setComponent(parentA, "VisualRenderer");
+      ctx.world.setComponent(parentA, "MeshVisual");
       ctx.world.setComponent(parentA, "Transform3D");
-      ctx.world.setComponent(parentB, "VisualRenderer");
+      ctx.world.setComponent(parentB, "MeshVisual");
       ctx.world.setComponent(parentB, "Transform3D");
-      ctx.world.setComponent(child, "VisualRenderer");
+      ctx.world.setComponent(child, "MeshVisual");
       ctx.world.setComponent(child, "Transform3D");
       ctx.hierarchy.setParent(child, parentA);
     });
@@ -93,9 +93,9 @@ describe("Hierarchy → Three.js parenting", () => {
     const child = ctx.world.createEntity();
 
     runFrame(ctx, () => {
-      ctx.world.setComponent(parent, "VisualRenderer");
+      ctx.world.setComponent(parent, "MeshVisual");
       ctx.world.setComponent(parent, "Transform3D");
-      ctx.world.setComponent(child, "VisualRenderer");
+      ctx.world.setComponent(child, "MeshVisual");
       ctx.world.setComponent(child, "Transform3D");
       ctx.hierarchy.setParent(child, parent);
     });
@@ -121,7 +121,7 @@ describe("Hierarchy → Three.js parenting", () => {
 
     // First frame: only child gets a mesh, parent has no VisualRenderer yet
     runFrame(ctx, () => {
-      ctx.world.setComponent(child, "VisualRenderer");
+      ctx.world.setComponent(child, "MeshVisual");
       ctx.world.setComponent(child, "Transform3D");
       ctx.hierarchy.setParent(child, parent);
     });
@@ -132,7 +132,7 @@ describe("Hierarchy → Three.js parenting", () => {
 
     // Second frame: parent gets a mesh
     runFrame(ctx, () => {
-      ctx.world.setComponent(parent, "VisualRenderer");
+      ctx.world.setComponent(parent, "MeshVisual");
       ctx.world.setComponent(parent, "Transform3D");
     });
 
@@ -149,13 +149,13 @@ describe("Hierarchy → Three.js parenting", () => {
     const child = ctx.world.createEntity();
 
     runFrame(ctx, () => {
-      ctx.world.setComponent(parent, "VisualRenderer");
+      ctx.world.setComponent(parent, "MeshVisual");
       ctx.world.setComponent(parent, "Transform3D", {
         position: [10, 0, 0],
         rotation: [0, 0, 0, 1],
         scale: [1, 1, 1],
       });
-      ctx.world.setComponent(child, "VisualRenderer");
+      ctx.world.setComponent(child, "MeshVisual");
       ctx.world.setComponent(child, "Transform3D", {
         position: [0, 5, 0],
         rotation: [0, 0, 0, 1],
@@ -186,19 +186,19 @@ describe("Hierarchy → Three.js parenting", () => {
     const child = ctx.world.createEntity();
 
     runFrame(ctx, () => {
-      ctx.world.setComponent(grandparent, "VisualRenderer");
+      ctx.world.setComponent(grandparent, "MeshVisual");
       ctx.world.setComponent(grandparent, "Transform3D", {
         position: [1, 0, 0],
         rotation: [0, 0, 0, 1],
         scale: [1, 1, 1],
       });
-      ctx.world.setComponent(parent, "VisualRenderer");
+      ctx.world.setComponent(parent, "MeshVisual");
       ctx.world.setComponent(parent, "Transform3D", {
         position: [0, 2, 0],
         rotation: [0, 0, 0, 1],
         scale: [1, 1, 1],
       });
-      ctx.world.setComponent(child, "VisualRenderer");
+      ctx.world.setComponent(child, "MeshVisual");
       ctx.world.setComponent(child, "Transform3D", {
         position: [0, 0, 3],
         rotation: [0, 0, 0, 1],

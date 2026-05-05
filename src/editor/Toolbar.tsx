@@ -1,6 +1,6 @@
-import { useRef } from "react";
-import { Save, FolderOpen, Focus } from "lucide-react";
-import { useEditor, useSelectedEntity } from "./useEditor";
+import { useEffect, useRef } from "react";
+import { Save, SaveAll, FolderOpen, Focus, FolderRoot, FolderSync } from "lucide-react";
+import { useEditor, useSelectedEntity, useProjectFolder } from "./useEditor";
 import { worldToJson } from "../engine/ecs/bridge";
 import { parseWorld } from "../engine/world";
 import { renderingRegistry } from "../engine/rendering/components";
@@ -8,45 +8,126 @@ import type { ComponentType, ComponentData } from "../engine/ecs/types";
 
 type Registry = typeof renderingRegistry;
 
+function ToolbarButton({
+  onClick,
+  disabled,
+  title,
+  active,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  title: string;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`
+        p-1.5 rounded text-secondary hover:text-primary hover:bg-surface
+        disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-secondary
+        cursor-pointer
+        ${active ? "bg-accent-dim text-accent ring-1 ring-accent/40" : ""}
+      `}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ToolbarSeparator() {
+  return <div className="w-px h-4 bg-subtle mx-0.5" />;
+}
+
 export function Toolbar() {
   const { store, world, hierarchy, binding, controls } = useEditor();
   const selectedEntity = useSelectedEntity();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const projectFolder = useProjectFolder();
 
-  function handleSave() {
+  const didAutoLoad = useRef(false);
+  useEffect(() => {
+    if (didAutoLoad.current) return;
+    didAutoLoad.current = true;
+    const lastId = store.getLastSceneId();
+    if (lastId) {
+      openSceneById(lastId).catch(() => {});
+    }
+  }, []);
+
+  async function openSceneById(id: string) {
+    const res = await fetch(`/api/scenes/${id}`);
+    if (!res.ok) return;
+    const scene = await res.json();
+    loadScene(scene.data);
+    store.setScene(scene.id, scene.name);
+  }
+
+  function getSceneContents() {
     const { json } = worldToJson(renderingRegistry, world, { hierarchy });
-    const blob = new Blob([JSON.stringify(json, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "scene.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
+    return json;
   }
 
-  function handleLoad() {
-    fileInputRef.current?.click();
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
+  async function handleSave() {
+    const sceneId = store.getSceneId();
+    if (sceneId) {
       try {
-        const json = JSON.parse(reader.result as string);
-        loadScene(json);
+        const data = getSceneContents();
+        const name = store.getSceneName() ?? "Scene";
+        await fetch(`/api/scenes/${sceneId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, data }),
+        });
+        return;
       } catch (err) {
-        console.error("Failed to load scene:", err);
+        console.error("Failed to save scene:", err);
       }
-    };
-    reader.readAsText(file);
+    }
+    await handleSaveAs();
+  }
 
-    // Reset the input so the same file can be loaded again
-    e.target.value = "";
+  async function handleSaveAs() {
+    const name = window.prompt("Scene name:", "Untitled Scene");
+    if (!name) return;
+
+    try {
+      const data = getSceneContents();
+      const res = await fetch("/api/scenes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, data }),
+      });
+      if (!res.ok) throw new Error("Failed to create scene");
+      const created = await res.json();
+      store.setScene(created.id, name);
+    } catch (err) {
+      console.error("Failed to save scene:", err);
+    }
+  }
+
+  async function handleLoad() {
+    try {
+      const res = await fetch("/api/scenes");
+      if (!res.ok) throw new Error("Failed to fetch scene list");
+      const scenes: { id: string; name: string }[] = await res.json();
+      if (scenes.length === 0) {
+        window.alert("No saved scenes found.");
+        return;
+      }
+
+      const listStr = scenes.map((s, i) => `${i + 1}. ${s.name}`).join("\n");
+      const choice = window.prompt(`Pick a scene (1-${scenes.length}):\n${listStr}`);
+      if (!choice) return;
+      const idx = parseInt(choice, 10) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= scenes.length) return;
+
+      await openSceneById(scenes[idx].id);
+    } catch (err) {
+      console.error("Failed to load scene:", err);
+    }
   }
 
   function loadScene(json: unknown) {
@@ -98,40 +179,44 @@ export function Toolbar() {
   }
 
   return (
-    <div className="flex gap-2 px-2 py-1.5 border-b border-subtle bg-panel">
-      <button
-        onClick={handleSave}
-        className="flex items-center gap-1 px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle"
-      >
-        <Save size={14} />
-        Save
-      </button>
-      <button
-        onClick={handleLoad}
-        className="flex items-center gap-1 px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle"
-      >
-        <FolderOpen size={14} />
-        Load
-      </button>
-      <button
+    <div className="flex items-center gap-0.5">
+      <ToolbarButton onClick={handleSave} title="Save (Ctrl+S)">
+        <Save size={14} strokeWidth={1.75} />
+      </ToolbarButton>
+      <ToolbarButton onClick={handleSaveAs} title="Save As...">
+        <SaveAll size={14} strokeWidth={1.75} />
+      </ToolbarButton>
+      <ToolbarButton onClick={handleLoad} title="Open Scene...">
+        <FolderOpen size={14} strokeWidth={1.75} />
+      </ToolbarButton>
+      <ToolbarSeparator />
+      <ToolbarButton
         onClick={() => {
           if (selectedEntity == null) return;
           const obj = binding.get(selectedEntity);
           if (obj) controls.focusOnObject(obj);
         }}
         disabled={selectedEntity == null}
-        className="flex items-center gap-1 px-2 py-0.5 bg-surface hover:bg-subtle text-primary text-[11px] rounded border border-subtle disabled:opacity-40 disabled:cursor-default"
+        title="Focus Selected (F)"
       >
-        <Focus size={14} />
-        Focus
-      </button>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json"
-        onChange={handleFileChange}
-        className="hidden"
-      />
+        <Focus size={14} strokeWidth={1.75} />
+      </ToolbarButton>
+      <ToolbarSeparator />
+      <ToolbarButton
+        onClick={() => projectFolder.open()}
+        title={projectFolder.isOpen ? `Project: ${projectFolder.name} (${projectFolder.assetRootName}/)` : "Connect to Server"}
+        active={projectFolder.isOpen}
+      >
+        <FolderRoot size={14} strokeWidth={1.75} />
+      </ToolbarButton>
+      {projectFolder.isOpen && (
+        <ToolbarButton
+          onClick={() => projectFolder.close()}
+          title="Disconnect"
+        >
+          <FolderSync size={14} strokeWidth={1.75} />
+        </ToolbarButton>
+      )}
     </div>
   );
 }

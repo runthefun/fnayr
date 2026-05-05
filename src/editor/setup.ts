@@ -4,15 +4,18 @@ import { CommandBuffer } from "../engine/ecs/commands";
 import { Hierarchy } from "../engine/ecs/hierarchy";
 import { renderingRegistry, renderingResources } from "../engine/rendering/components";
 import { ThreeBinding } from "../engine/rendering/binding";
-import { createRenderSyncSystem, createTransformSyncSystem, createAssetRequestSystem, createModelResolveSystem } from "../engine/rendering/systems";
+import { createRenderSyncSystem, createTransformSyncSystem, createAssetRequestSystem, createAssetResolveSystem, AssetResolver, createModelHandler, createTextureHandler } from "../engine/rendering/systems";
 import type { SlotEntry } from "../engine/rendering/systems";
 import { createLightSyncSystem, createBackgroundSyncSystem } from "../engine/rendering/lights";
-import { GltfAssetLoader } from "../engine/rendering/loaders";
+import { GltfAssetLoader, TextureAssetLoader } from "../engine/rendering/loaders";
 import { AssetManager } from "../engine/assets";
 import { EDITOR_LAYER } from "../engine/rendering/constants";
 import { EditorStore } from "./EditorStore";
 import { GizmoManager } from "./GizmoManager";
 import { EditorCameraControls } from "./EditorCameraControls";
+import { ProjectFolder } from "./ProjectFolder";
+import { AssetUriResolver } from "./AssetUriResolver";
+import { ThumbnailCache } from "./ThumbnailCache";
 
 type Registry = typeof renderingRegistry;
 
@@ -25,6 +28,9 @@ export type EditorSession = {
   controls: EditorCameraControls;
   renderer: THREE.WebGLRenderer;
   camera: THREE.PerspectiveCamera;
+  projectFolder: ProjectFolder;
+  resolver: AssetUriResolver;
+  thumbnailCache: ThumbnailCache;
   dispose: () => void;
 };
 
@@ -42,9 +48,16 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   const hierarchy = new Hierarchy(world);
   const store = new EditorStore(world);
 
+  // Project folder + URI resolver + thumbnail cache
+  const projectFolder = new ProjectFolder();
+  const resolver = new AssetUriResolver(projectFolder);
+  const thumbnailCache = new ThumbnailCache(projectFolder);
+
   // Asset pipeline
   const assetManager = new AssetManager();
   assetManager.registerLoader("glb", new GltfAssetLoader());
+  assetManager.registerLoader("texture", new TextureAssetLoader());
+  assetManager.uriResolver = async (uri) => resolver.resolve(uri);
   const slots: Map<string, SlotEntry> = new Map();
 
   const gizmo = new GizmoManager(world, binding, store, camera, canvas);
@@ -53,7 +66,10 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
 
   const renderSync = createRenderSyncSystem(binding);
   const assetRequestSync = createAssetRequestSystem(assetManager, slots, renderingRegistry);
-  const modelResolveSync = createModelResolveSystem(assetManager, binding, slots);
+  const assetResolver = new AssetResolver<Registry, ThreeBinding<Registry>>();
+  assetResolver.register(createModelHandler() as any);
+  assetResolver.register(createTextureHandler() as any);
+  const assetResolveSync = createAssetResolveSystem(assetManager, binding as any, slots, assetResolver as any);
   const lightSync = createLightSyncSystem(binding.scene, binding);
   const backgroundSync = createBackgroundSyncSystem(binding.scene);
   const transformSync = createTransformSyncSystem(binding, {
@@ -67,37 +83,41 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   world.beginFrame();
 
   const box = world.createEntity();
+  world.setComponent(box, "Meta", { name: "Box" });
   world.setComponent(box, "Transform3D", {
     position: [0, 1, 0],
     rotation: [0, 0, 0, 1],
     scale: [1, 1, 1],
   });
-  world.setComponent(box, "VisualRenderer", {
-    kind: "mesh",
-    geometry: "box",
+  world.setComponent(box, "MeshVisual", {
+    geometry: { kind: "box", width: 1, height: 1, depth: 1 },
     color: [0.9, 0.15, 0.15, 1],
+    texture: { kind: "asset", type: "texture", uri: "" },
   });
 
   const ground = world.createEntity();
+  world.setComponent(ground, "Meta", { name: "Ground" });
   world.setComponent(ground, "Transform3D", {
     position: [0, 0, 0],
     rotation: [-Math.SQRT1_2, 0, 0, Math.SQRT1_2],
     scale: [10, 10, 1],
   });
-  world.setComponent(ground, "VisualRenderer", {
-    kind: "mesh",
-    geometry: "plane",
+  world.setComponent(ground, "MeshVisual", {
+    geometry: { kind: "plane", width: 1, height: 1 },
     color: [0.2, 0.7, 0.2, 1],
+    texture: { kind: "asset", type: "texture", uri: "" },
   });
 
   // Lights as ECS entities
   const ambientEntity = world.createEntity();
+  world.setComponent(ambientEntity, "Meta", { name: "Ambient Light" });
   world.setComponent(ambientEntity, "AmbientLight", {
     color: [0.25, 0.25, 0.25, 1],
     intensity: 2,
   });
 
   const dirLightEntity = world.createEntity();
+  world.setComponent(dirLightEntity, "Meta", { name: "Directional Light" });
   world.setComponent(dirLightEntity, "Transform3D", {
     position: [5, 10, 7],
     rotation: [0, 0, 0, 1],
@@ -109,6 +129,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   });
 
   const bgEntity = world.createEntity();
+  world.setComponent(bgEntity, "Meta", { name: "Background" });
   world.setComponent(bgEntity, "Background", {
     color: [0.53, 0.81, 0.92],
     intensity: 1,
@@ -118,7 +139,7 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
   // Run sync systems to build initial scene graph
   renderSync(world, 0, commands);
   assetRequestSync(world as any, 0, commands as any);
-  modelResolveSync(world as any, 0, commands as any);
+  assetResolveSync(world as any, 0, commands as any);
   lightSync(world, 0, commands);
   backgroundSync(world, 0, commands);
   transformSync(world, 0, commands);
@@ -134,16 +155,17 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     const dt = (now - prevTime) / 1000;
     prevTime = now;
 
+    world.beginFrame();
     controls.update(dt);
     renderSync(world, 0, commands);
     assetRequestSync(world as any, 0, commands as any);
-    modelResolveSync(world as any, 0, commands as any);
+    assetResolveSync(world as any, 0, commands as any);
     lightSync(world, 0, commands);
     backgroundSync(world, 0, commands);
     transformSync(world, 0, commands);
     commands.flush();
     gizmo.tick();
-    world.flushChanges();
+    world.endFrame();
     renderer.render(binding.scene, camera);
     rafId = requestAnimationFrame(loop);
   }
@@ -154,13 +176,17 @@ export function createEditorSession(canvas: HTMLCanvasElement): EditorSession {
     controls.dispose();
     gizmo.dispose();
     store.dispose();
+    resolver.dispose();
     assetManager.dispose();
     binding.dispose();
     renderer.dispose();
   }
 
   // Expose for devtools inspection
-  (window as any).__editor = { world, binding, hierarchy, store, gizmo, controls, renderer, camera, assetManager, slots };
+  (window as any).__editor = { world, binding, hierarchy, store, gizmo, controls, renderer, camera, assetManager, slots, projectFolder, resolver, thumbnailCache };
 
-  return { world, binding, hierarchy, store, gizmo, controls, renderer, camera, dispose };
+  // Restore project folder from IndexedDB (fire and forget)
+  projectFolder.restore();
+
+  return { world, binding, hierarchy, store, gizmo, controls, renderer, camera, projectFolder, resolver, thumbnailCache, dispose };
 }

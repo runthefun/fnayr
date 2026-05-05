@@ -15,7 +15,7 @@ function setup() {
   const scene = new THREE.Scene();
   const binding = new ThreeBinding(world, scene);
   const commands = new CommandBuffer(world);
-  const lightSync = createLightSyncSystem(scene);
+  const lightSync = createLightSyncSystem(scene, binding);
   const transformSync = createTransformSyncSystem(binding);
   return { world, scene, binding, commands, lightSync, transformSync };
 }
@@ -427,7 +427,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xff0000,
+        color: [1, 0, 0, 1],
         intensity: 2,
         distance: 15,
         angle: Math.PI / 4,
@@ -454,7 +454,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -491,7 +491,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -517,7 +517,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -542,7 +542,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -565,7 +565,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -597,7 +597,7 @@ describe("Light sync system", () => {
 
     runFrame(ctx, () => {
       ctx.world.setComponent(entity, "SpotLight", {
-        color: 0xffffff,
+        color: [1, 1, 1, 1],
         intensity: 1,
         distance: 0,
         angle: Math.PI / 3,
@@ -778,5 +778,35 @@ describe("Background sync system", () => {
     expect(ctx.scene.background).toBeNull();
     expect(ctx.scene.backgroundIntensity).toBe(1);
     expect(ctx.scene.backgroundBlurriness).toBe(0);
+  });
+
+  it("destroy + recreate in same frame applies the new background", () => {
+    const ctx = setupBg();
+    const oldEntity = ctx.world.createEntity();
+
+    runBgFrame(ctx, () => {
+      ctx.world.setComponent(oldEntity, "Background", {
+        color: [0.1, 0.2, 0.3],
+        intensity: 1,
+        blurriness: 0,
+      });
+    });
+
+    // Simulate scene reload: destroy old entity and create new one in same frame
+    runBgFrame(ctx, () => {
+      ctx.world.destroyEntity(oldEntity);
+      const newEntity = ctx.world.createEntity();
+      ctx.world.setComponent(newEntity, "Background", {
+        color: [0.53, 0.81, 0.92],
+        intensity: 1,
+        blurriness: 0,
+      });
+    });
+
+    expect(ctx.scene.background).toBeInstanceOf(THREE.Color);
+    const bg = ctx.scene.background as THREE.Color;
+    expect(bg.r).toBeCloseTo(0.53);
+    expect(bg.g).toBeCloseTo(0.81);
+    expect(bg.b).toBeCloseTo(0.92);
   });
 });

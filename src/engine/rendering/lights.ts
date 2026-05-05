@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { World } from "../ecs/types";
+import type { ComponentType, World } from "../ecs/types";
 import type { Commands } from "../ecs/commands";
 import type { System } from "../ecs/systems";
 import type { renderingRegistry } from "./components";
@@ -19,27 +19,27 @@ export function createBackgroundSyncSystem(
   }
 
   return (world: World<LightRegistry>, _dt: number, _commands: Commands<LightRegistry>) => {
-    for (const entity of world.getAdded("Background" as any)) {
-      const data = world.getComponent(entity, "Background" as any) as any;
-      if (!data) continue;
-      applyBackground(data);
-    }
-    for (const entity of world.getUpdated("Background" as any)) {
-      const data = world.getComponent(entity, "Background" as any) as any;
-      if (!data) continue;
-      applyBackground(data);
-    }
-    for (const _entity of world.getRemoved("Background" as any)) {
+    for (const _entity of world.getRemoved("Background" as ComponentType<LightRegistry>)) {
       scene.background = null;
       scene.backgroundIntensity = 1;
       scene.backgroundBlurriness = 0;
+    }
+    for (const entity of world.getAdded("Background" as ComponentType<LightRegistry>)) {
+      const data = world.getComponent(entity, "Background" as ComponentType<LightRegistry>) as any;
+      if (!data) continue;
+      applyBackground(data);
+    }
+    for (const entity of world.getUpdated("Background" as ComponentType<LightRegistry>)) {
+      const data = world.getComponent(entity, "Background" as ComponentType<LightRegistry>) as any;
+      if (!data) continue;
+      applyBackground(data);
     }
   };
 }
 
 export function createLightSyncSystem(
   scene: THREE.Scene,
-  binding?: ThreeBinding<LightRegistry>
+  binding: ThreeBinding<LightRegistry>
 ): System<LightRegistry> {
   const directionalLights = new Map<EntityId, THREE.DirectionalLight>();
   const pointLights = new Map<EntityId, THREE.PointLight>();
@@ -70,45 +70,34 @@ export function createLightSyncSystem(
 
   return (world: World<LightRegistry>, _dt: number, _commands: Commands<LightRegistry>) => {
     // --- DirectionalLight ---
-    for (const entity of world.getAdded("DirectionalLight" as any)) {
-      const data = world.getComponent(entity, "DirectionalLight" as any) as any;
+    for (const entity of world.getAdded("DirectionalLight" as ComponentType<LightRegistry>)) {
+      const data = world.getComponent(entity, "DirectionalLight" as ComponentType<LightRegistry>) as any;
       if (!data) continue;
       const light = new THREE.DirectionalLight(
         new THREE.Color(data.color[0], data.color[1], data.color[2]),
         data.intensity
       );
-      const transform = world.getComponent(
-        entity,
-        "Transform3D" as any
-      ) as any;
-      if (transform) {
-        light.position.set(
-          transform.position[0],
-          transform.position[1],
-          transform.position[2]
-        );
-      }
       light.userData.entityId = entity;
       directionalLights.set(entity, light);
       scene.add(light);
-      binding?.set(entity, light);
+      binding.set(entity, light);
 
       const helper = new THREE.DirectionalLightHelper(light, 1);
       addHelper(entity, helper);
     }
-    for (const entity of world.getRemoved("DirectionalLight" as any)) {
+    for (const entity of world.getRemoved("DirectionalLight" as ComponentType<LightRegistry>)) {
       const light = directionalLights.get(entity);
       if (light) {
         light.removeFromParent();
         directionalLights.delete(entity);
-        binding?.delete(entity);
+        binding.delete(entity);
       }
       removeHelper(entity);
     }
-    for (const entity of world.getUpdated("DirectionalLight" as any)) {
+    for (const entity of world.getUpdated("DirectionalLight" as ComponentType<LightRegistry>)) {
       const light = directionalLights.get(entity);
       if (!light) continue;
-      const data = world.getComponent(entity, "DirectionalLight" as any) as any;
+      const data = world.getComponent(entity, "DirectionalLight" as ComponentType<LightRegistry>) as any;
       if (!data) continue;
       light.color.setRGB(data.color[0], data.color[1], data.color[2]);
       light.intensity = data.intensity;
@@ -117,8 +106,8 @@ export function createLightSyncSystem(
     }
 
     // --- AmbientLight ---
-    for (const entity of world.getAdded("AmbientLight" as any)) {
-      const data = world.getComponent(entity, "AmbientLight" as any) as any;
+    for (const entity of world.getAdded("AmbientLight" as ComponentType<LightRegistry>)) {
+      const data = world.getComponent(entity, "AmbientLight" as ComponentType<LightRegistry>) as any;
       if (!data) continue;
       const light = new THREE.AmbientLight(
         new THREE.Color(data.color[0], data.color[1], data.color[2]),
@@ -129,25 +118,25 @@ export function createLightSyncSystem(
       scene.add(light);
       // No helper for ambient lights (no position/direction)
     }
-    for (const entity of world.getRemoved("AmbientLight" as any)) {
+    for (const entity of world.getRemoved("AmbientLight" as ComponentType<LightRegistry>)) {
       const light = ambientLights.get(entity);
       if (light) {
         light.removeFromParent();
         ambientLights.delete(entity);
       }
     }
-    for (const entity of world.getUpdated("AmbientLight" as any)) {
+    for (const entity of world.getUpdated("AmbientLight" as ComponentType<LightRegistry>)) {
       const light = ambientLights.get(entity);
       if (!light) continue;
-      const data = world.getComponent(entity, "AmbientLight" as any) as any;
+      const data = world.getComponent(entity, "AmbientLight" as ComponentType<LightRegistry>) as any;
       if (!data) continue;
       light.color.setRGB(data.color[0], data.color[1], data.color[2]);
       light.intensity = data.intensity;
     }
 
     // --- PointLight ---
-    for (const entity of world.getAdded("PointLight" as any)) {
-      const data = world.getComponent(entity, "PointLight" as any) as any;
+    for (const entity of world.getAdded("PointLight" as ComponentType<LightRegistry>)) {
+      const data = world.getComponent(entity, "PointLight" as ComponentType<LightRegistry>) as any;
       if (!data) continue;
       const light = new THREE.PointLight(
         new THREE.Color(data.color[0], data.color[1], data.color[2]),
@@ -155,38 +144,27 @@ export function createLightSyncSystem(
         data.distance,
         data.decay
       );
-      const transform = world.getComponent(
-        entity,
-        "Transform3D" as any
-      ) as any;
-      if (transform) {
-        light.position.set(
-          transform.position[0],
-          transform.position[1],
-          transform.position[2]
-        );
-      }
       light.userData.entityId = entity;
       pointLights.set(entity, light);
       scene.add(light);
-      binding?.set(entity, light);
+      binding.set(entity, light);
 
       const helper = new THREE.PointLightHelper(light, 0.5);
       addHelper(entity, helper);
     }
-    for (const entity of world.getRemoved("PointLight" as any)) {
+    for (const entity of world.getRemoved("PointLight" as ComponentType<LightRegistry>)) {
       const light = pointLights.get(entity);
       if (light) {
         light.removeFromParent();
         pointLights.delete(entity);
-        binding?.delete(entity);
+        binding.delete(entity);
       }
       removeHelper(entity);
     }
-    for (const entity of world.getUpdated("PointLight" as any)) {
+    for (const entity of world.getUpdated("PointLight" as ComponentType<LightRegistry>)) {
       const light = pointLights.get(entity);
       if (!light) continue;
-      const data = world.getComponent(entity, "PointLight" as any) as any;
+      const data = world.getComponent(entity, "PointLight" as ComponentType<LightRegistry>) as any;
       if (!data) continue;
       light.color.setRGB(data.color[0], data.color[1], data.color[2]);
       light.intensity = data.intensity;
@@ -197,11 +175,11 @@ export function createLightSyncSystem(
     }
 
     // --- SpotLight ---
-    for (const entity of world.getAdded("SpotLight" as any)) {
-      const data = world.getComponent(entity, "SpotLight" as any) as any;
+    for (const entity of world.getAdded("SpotLight" as ComponentType<LightRegistry>)) {
+      const data = world.getComponent(entity, "SpotLight" as ComponentType<LightRegistry>) as any;
       if (!data) continue;
       const light = new THREE.SpotLight(
-        data.color,
+        new THREE.Color(data.color[0], data.color[1], data.color[2]),
         data.intensity,
         data.distance,
         data.angle,
@@ -209,42 +187,31 @@ export function createLightSyncSystem(
         data.decay
       );
       light.castShadow = data.castShadow;
-      const transform = world.getComponent(
-        entity,
-        "Transform3D" as any
-      ) as any;
-      if (transform) {
-        light.position.set(
-          transform.position[0],
-          transform.position[1],
-          transform.position[2]
-        );
-      }
       light.userData.entityId = entity;
       spotLights.set(entity, light);
       scene.add(light);
-      binding?.set(entity, light);
+      binding.set(entity, light);
 
       if (data.showHelper) {
         const helper = new THREE.SpotLightHelper(light);
         addHelper(entity, helper);
       }
     }
-    for (const entity of world.getRemoved("SpotLight" as any)) {
+    for (const entity of world.getRemoved("SpotLight" as ComponentType<LightRegistry>)) {
       const light = spotLights.get(entity);
       if (light) {
         light.removeFromParent();
         spotLights.delete(entity);
-        binding?.delete(entity);
+        binding.delete(entity);
       }
       removeHelper(entity);
     }
-    for (const entity of world.getUpdated("SpotLight" as any)) {
+    for (const entity of world.getUpdated("SpotLight" as ComponentType<LightRegistry>)) {
       const light = spotLights.get(entity);
       if (!light) continue;
-      const data = world.getComponent(entity, "SpotLight" as any) as any;
+      const data = world.getComponent(entity, "SpotLight" as ComponentType<LightRegistry>) as any;
       if (!data) continue;
-      light.color.set(data.color);
+      light.color.setRGB(data.color[0], data.color[1], data.color[2]);
       light.intensity = data.intensity;
       light.distance = data.distance;
       light.angle = data.angle;
@@ -262,28 +229,6 @@ export function createLightSyncSystem(
       } else if (existingHelper && "update" in existingHelper) {
         (existingHelper as any).update();
       }
-    }
-
-    // --- Transform3D sync for light entities ---
-    function getLightObject(entity: EntityId): THREE.Object3D | undefined {
-      return (
-        directionalLights.get(entity) ??
-        pointLights.get(entity) ??
-        spotLights.get(entity)
-      );
-    }
-
-    for (const entity of world.getAdded("Transform3D" as any)) {
-      const obj = getLightObject(entity);
-      if (!obj) continue;
-      const t = world.getComponent(entity, "Transform3D" as any) as any;
-      if (t) obj.position.set(t.position[0], t.position[1], t.position[2]);
-    }
-    for (const entity of world.getUpdated("Transform3D" as any)) {
-      const obj = getLightObject(entity);
-      if (!obj) continue;
-      const t = world.getComponent(entity, "Transform3D" as any) as any;
-      if (t) obj.position.set(t.position[0], t.position[1], t.position[2]);
     }
 
     // Update all helpers each frame (position may have changed via transform system)

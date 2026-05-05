@@ -19,6 +19,8 @@ export class AssetManager {
   private _firstOptions = new Map<string, string>();
   private _warnedDivergent = new Set<string>();
 
+  uriResolver?: (uri: string) => Promise<string>;
+
   static cacheKey(type: string, uri: string): string {
     return `${type}::${uri}`;
   }
@@ -73,7 +75,11 @@ export class AssetManager {
     // Capture entry reference for stale-settle safety
     const capturedEntry = entry;
 
-    loader.load(uri, options).then(
+    const loadPromise = this.uriResolver
+      ? this.uriResolver(uri).catch(() => uri).then((loadUri) => loader.load(loadUri, options))
+      : loader.load(uri, options);
+
+    loadPromise.then(
       (asset) => {
         // Stale-settle check: if the cache entry for this key is no longer
         // the same object (released-and-re-requested, or released-and-gone),

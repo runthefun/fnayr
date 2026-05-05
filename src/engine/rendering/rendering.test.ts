@@ -4,7 +4,8 @@ import { createWorld } from "../ecs/world";
 import { CommandBuffer } from "../ecs/commands";
 import { renderingRegistry } from "./components";
 import { ThreeBinding } from "./binding";
-import { createRenderSyncSystem, createTransformSyncSystem } from "./systems";
+import { createRenderSyncSystem, createTransformSyncSystem, createAssetResolveSystem, AssetResolver, createTextureHandler } from "./systems";
+import { AssetManager } from "../assets/manager";
 
 describe("Rendering bridge", () => {
   function setup() {
@@ -12,6 +13,11 @@ describe("Rendering bridge", () => {
     const binding = new ThreeBinding(world);
     const renderSync = createRenderSyncSystem(binding);
     const transformSync = createTransformSyncSystem(binding);
+    const assetManager = new AssetManager();
+    const slots = new Map();
+    const resolver = new AssetResolver();
+    resolver.register(createTextureHandler() as any);
+    const textureResolveSync = createAssetResolveSystem(assetManager, binding as any, slots, resolver as any);
 
     /** Begin a frame, run a setup callback, then execute sync systems, then end the frame. */
     function frame(fn?: () => void) {
@@ -19,6 +25,7 @@ describe("Rendering bridge", () => {
       fn?.();
       const cmds = new CommandBuffer(world);
       renderSync(world, 0, cmds);
+      textureResolveSync(world as any, 0, cmds as any);
       transformSync(world, 0, cmds);
       cmds.flush();
       world.endFrame();
@@ -27,12 +34,12 @@ describe("Rendering bridge", () => {
     return { world, binding, frame };
   }
 
-  it("VisualRenderer mesh added → Mesh appears in scene", () => {
+  it("MeshVisual added → Mesh appears in scene", () => {
     const { world, binding, frame } = setup();
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer");
+      world.setComponent(entity, "MeshVisual");
     });
 
     expect(binding.scene.children).toHaveLength(1);
@@ -50,7 +57,7 @@ describe("Rendering bridge", () => {
         rotation: [0, 0, 0, 1],
         scale: [1, 1, 1],
       });
-      world.setComponent(entity, "VisualRenderer");
+      world.setComponent(entity, "MeshVisual");
     });
 
     const obj = binding.get(entity)!;
@@ -64,7 +71,7 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer");
+      world.setComponent(entity, "MeshVisual");
     });
     expect(binding.scene.children).toHaveLength(1);
 
@@ -73,17 +80,17 @@ describe("Rendering bridge", () => {
     expect(binding.get(entity)).toBeUndefined();
   });
 
-  it("VisualRenderer removed → Mesh removed from scene", () => {
+  it("MeshVisual removed → Mesh removed from scene", () => {
     const { world, binding, frame } = setup();
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer");
+      world.setComponent(entity, "MeshVisual");
     });
     expect(binding.scene.children).toHaveLength(1);
 
     frame(() => {
-      world.removeComponent(entity, "VisualRenderer");
+      world.removeComponent(entity, "MeshVisual");
     });
 
     expect(binding.scene.children).toHaveLength(0);
@@ -96,7 +103,11 @@ describe("Rendering bridge", () => {
     let entities: number[];
     frame(() => {
       entities = world.spawn(3, {
-        VisualRenderer: { kind: "mesh", geometry: "box", color: [1, 0, 0, 1] },
+        MeshVisual: {
+          geometry: { kind: "box", width: 1, height: 1, depth: 1 },
+          color: [0.8, 0.8, 0.8, 1],
+          texture: { kind: "asset", type: "texture", uri: "" },
+        },
         Transform3D: (i: number) => ({
           position: [i * 2, 0, 0] as [number, number, number],
           rotation: [0, 0, 0, 1] as [number, number, number, number],
@@ -120,7 +131,7 @@ describe("Rendering bridge", () => {
 
     frame(() => {
       world.setComponent(entity, "Transform3D");
-      world.setComponent(entity, "VisualRenderer");
+      world.setComponent(entity, "MeshVisual");
     });
 
     const obj = binding.get(entity)!;
@@ -136,15 +147,15 @@ describe("Rendering bridge", () => {
     expect(obj.quaternion.w).toBe(1);
   });
 
-  it("color update → material color changes", () => {
+  it("color update → material color changes via MeshVisual", () => {
     const { world, binding, frame } = setup();
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer", {
-        kind: "mesh",
-        geometry: "box",
+      world.setComponent(entity, "MeshVisual", {
+        geometry: { kind: "box", width: 1, height: 1, depth: 1 },
         color: [1, 0, 0, 1],
+        texture: { kind: "asset", type: "texture", uri: "" },
       });
     });
 
@@ -155,8 +166,8 @@ describe("Rendering bridge", () => {
     expect(mat.color.b).toBe(0);
 
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer")!;
-      if (mr.kind === "mesh") mr.color = [0, 1, 0, 1];
+      const mv = world.getMut(entity, "MeshVisual")! as any;
+      mv.color = [0, 1, 0, 1];
     });
 
     expect(mat.color.r).toBe(0);
@@ -174,7 +185,7 @@ describe("Rendering bridge", () => {
         rotation: [0, 0, 0, 1],
         scale: [1, 1, 1],
       });
-      world.setComponent(entity, "VisualRenderer");
+      world.setComponent(entity, "MeshVisual");
     });
 
     frame(() => {
@@ -193,10 +204,10 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer", {
-        kind: "mesh",
-        geometry: "box",
+      world.setComponent(entity, "MeshVisual", {
+        geometry: { kind: "box", width: 1, height: 1, depth: 1 },
         color: [0.8, 0.8, 0.8, 1],
+        texture: { kind: "asset", type: "texture", uri: "" },
       });
     });
 
@@ -204,8 +215,13 @@ describe("Rendering bridge", () => {
     expect(mesh.geometry).toBeInstanceOf(THREE.BoxGeometry);
 
     frame(() => {
-      const mr = world.getMut(entity, "VisualRenderer")!;
-      if (mr.kind === "mesh") mr.geometry = "sphere";
+      const mv = world.getMut(entity, "MeshVisual")! as any;
+      mv.geometry = {
+        kind: "sphere",
+        radius: 0.5,
+        widthSegments: 32,
+        heightSegments: 16,
+      };
     });
 
     expect(mesh.geometry).toBeInstanceOf(THREE.SphereGeometry);
@@ -216,10 +232,10 @@ describe("Rendering bridge", () => {
     const entity = world.createEntity();
 
     frame(() => {
-      world.setComponent(entity, "VisualRenderer", {
-        kind: "mesh",
-        geometry: "box",
-        color: [1, 0, 0, 1],
+      world.setComponent(entity, "MeshVisual", {
+        geometry: { kind: "box", width: 1, height: 1, depth: 1 },
+        color: [0.8, 0.8, 0.8, 1],
+        texture: { kind: "asset", type: "texture", uri: "" },
       });
     });
 

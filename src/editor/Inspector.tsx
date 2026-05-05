@@ -1,5 +1,5 @@
-import { type ChangeEvent } from "react";
-import { X } from "lucide-react";
+import { type ChangeEvent, useState } from "react";
+import { X, ChevronRight, ChevronDown } from "lucide-react";
 import { useEditor, useSelectedEntity } from "./useEditor";
 import { SchemaField } from "./fields/SchemaField";
 import { getDefault } from "../engine/schema";
@@ -11,19 +11,26 @@ type ComponentKey = keyof typeof renderingRegistry;
 export function Inspector() {
   const { world } = useEditor();
   const selectedEntity = useSelectedEntity();
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const key of Object.keys(world.registry)) {
+      if (key !== "Transform3D") initial[key] = true;
+    }
+    return initial;
+  });
 
   if (selectedEntity === null) {
     return (
-      <div className="p-3 text-muted text-center">
-        No entity selected
+      <div className="flex flex-col items-center justify-center h-full gap-1 text-muted">
+        <span className="text-label">No entity selected</span>
       </div>
     );
   }
 
   if (!world.isAlive(selectedEntity)) {
     return (
-      <div className="p-3 text-muted text-center">
-        Entity not alive
+      <div className="flex flex-col items-center justify-center h-full gap-1 text-muted">
+        <span className="text-label">Entity not alive</span>
       </div>
     );
   }
@@ -49,7 +56,7 @@ export function Inspector() {
     } else {
       const type = raw.slice(0, sepIdx) as ComponentKey;
       const variant = raw.slice(sepIdx + 2);
-      const schema = world.registry[type] as TaggedUnionSchema;
+      const schema = world.registry[type] as unknown as TaggedUnionSchema;
       const variantSchema = schema.variants[variant];
       world.setComponent(selectedEntity!, type, getDefault(variantSchema) as never);
     }
@@ -61,46 +68,69 @@ export function Inspector() {
 
   return (
     <div>
-      <div className="px-2 py-1.5 text-muted font-medium uppercase tracking-wider text-[10px] border-b border-subtle">
-        Inspector — Entity {selectedEntity}
+      {/* Panel header */}
+      <div className="px-3 py-2 text-muted font-medium uppercase tracking-widest text-header border-b border-subtle flex items-center gap-2">
+        <span>Inspector</span>
+        <span className="text-header font-mono text-muted/60 font-normal normal-case tracking-normal">#{selectedEntity}</span>
       </div>
+
       {componentTypes.map((type) => {
         const schema = world.registry[type] as SchemaLike;
         const data = world.getComponent(selectedEntity, type);
+        const isCollapsed = collapsed[type];
 
         return (
           <div key={type} className="border-b border-subtle">
-            <div className="px-2 py-1.5 bg-surface text-primary font-medium text-[11px] flex items-center justify-between">
-              <span>{type}</span>
+            {/* Component header */}
+            <div
+              className="px-3 py-1.5 bg-surface/50 text-primary text-body flex items-center justify-between cursor-pointer select-none hover:bg-surface"
+              onClick={() =>
+                setCollapsed((prev) => ({ ...prev, [type]: !prev[type] }))
+              }
+            >
+              <span className="flex items-center gap-1.5 font-medium">
+                {isCollapsed ? (
+                  <ChevronRight size={11} strokeWidth={2} className="text-muted" />
+                ) : (
+                  <ChevronDown size={11} strokeWidth={2} className="text-muted" />
+                )}
+                {type}
+              </span>
               <button
-                onClick={() => handleRemoveComponent(type)}
-                className="text-muted hover:text-primary text-[10px] cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveComponent(type);
+                }}
+                className="text-muted hover:text-danger cursor-pointer p-0.5 rounded hover:bg-danger-dim"
                 title={`Remove ${type}`}
               >
-                <X size={12} />
+                <X size={11} strokeWidth={2} />
               </button>
             </div>
-            <div className="px-2 py-1.5">
-              <SchemaField
-                value={data}
-                schema={schema}
-                onChange={(newValue) => {
-                  world.setComponent(selectedEntity, type, newValue as never);
-                }}
-              />
-            </div>
+            {!isCollapsed && (
+              <div className="px-3 py-2">
+                <SchemaField
+                  value={data}
+                  schema={schema}
+                  onChange={(newValue) => {
+                    world.setComponent(selectedEntity, type, newValue as never);
+                  }}
+                />
+              </div>
+            )}
           </div>
         );
       })}
+
       {availableComponents.length > 0 && (
-        <div className="px-2 py-2 border-b border-subtle">
+        <div className="px-3 py-2.5">
           <select
             onChange={handleAddComponent}
             value=""
-            className="w-full bg-surface text-primary text-[11px] px-2 py-1 border border-subtle rounded cursor-pointer outline-none focus:border-focus"
+            className="w-full bg-surface text-secondary text-body px-2 py-1.5 border border-subtle rounded cursor-pointer outline-none focus:border-focus hover:border-border"
           >
             <option value="" disabled>
-              Add Component...
+              + Add Component...
             </option>
             {availableComponents.map((type) => {
               const schema = world.registry[type] as SchemaLike;

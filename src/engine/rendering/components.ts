@@ -53,17 +53,35 @@ export const Transform3D = defineSchema(
   })
 );
 
-export const VisualRenderer = defineSchema(
-  s.tagged("kind", {
-    mesh: s.object({
-      kind: s.literal("mesh"),
-      geometry: s.enum(["box", "sphere", "plane"] as const, { default: "box" }),
-      color: colorTuple,
+export const MeshVisual = defineSchema(
+  s.object({
+    geometry: s.tagged("kind", {
+      box: s.object({
+        kind: s.literal("box"),
+        width: s.number({ finite: true, default: 1 }),
+        height: s.number({ finite: true, default: 1 }),
+        depth: s.number({ finite: true, default: 1 }),
+      }),
+      sphere: s.object({
+        kind: s.literal("sphere"),
+        radius: s.number({ finite: true, default: 0.5 }),
+        widthSegments: s.number({ integer: true, default: 32 }),
+        heightSegments: s.number({ integer: true, default: 16 }),
+      }),
+      plane: s.object({
+        kind: s.literal("plane"),
+        width: s.number({ finite: true, default: 1 }),
+        height: s.number({ finite: true, default: 1 }),
+      }),
     }),
-    model: s.object({
-      kind: s.literal("model"),
-      asset: assetRef("glb", { hidden: ["sub", "options"] }),
-    }),
+    color: colorTuple,
+    texture: assetRef("texture", { hidden: ["sub", "options"] }),
+  })
+);
+
+export const ModelVisual = defineSchema(
+  s.object({
+    asset: assetRef("glb", { hidden: ["sub", "options"] }),
   })
 );
 
@@ -98,7 +116,7 @@ export const PointLight = defineSchema(
 
 export const SpotLight = defineSchema(
   s.object({
-    color: s.number({ integer: true, default: 0xffffff }),
+    color: colorTuple,
     intensity: s.number({ default: 1 }),
     distance: s.number({ default: 0 }),
     angle: s.number({ default: Math.PI / 3 }),
@@ -131,9 +149,17 @@ export const renderingResources = {
   LoadingState,
 } as const;
 
+export const Meta = defineSchema(
+  s.object({
+    name: s.string({ default: "" }),
+  })
+);
+
 export const renderingRegistry = {
+  Meta,
   Transform3D,
-  VisualRenderer,
+  MeshVisual,
+  ModelVisual,
   Spin,
   DirectionalLight,
   AmbientLight,

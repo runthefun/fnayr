@@ -19,6 +19,7 @@ import { ObjectField } from "./ObjectField";
 import { TagField } from "./TagField";
 import { TaggedUnionField } from "./TaggedUnionField";
 import { EulerField } from "./EulerField";
+import { AssetRefField } from "./AssetRefField";
 
 type Props = {
   value: unknown;
@@ -126,7 +127,7 @@ export function SchemaField({ value, schema, onChange }: Props) {
         <div className="flex flex-col gap-1">
           {items.map((itemSchema, i) => (
             <div key={i} className="flex items-center gap-1">
-              <span className="text-muted text-[10px] w-4 text-right shrink-0">
+              <span className="text-muted text-label w-4 text-right shrink-0">
                 {i}
               </span>
               <SchemaField
@@ -144,14 +145,25 @@ export function SchemaField({ value, schema, onChange }: Props) {
       );
     }
 
-    case "object":
+    case "object": {
+      const objSchema = schema as ObjectSchema;
+      if (objSchema.meta?.kind === "assetRef") {
+        return (
+          <AssetRefField
+            value={value as Record<string, unknown>}
+            schema={objSchema}
+            onChange={onChange as (v: Record<string, unknown>) => void}
+          />
+        );
+      }
       return (
         <ObjectField
           value={value as Record<string, unknown>}
-          schema={schema as ObjectSchema}
+          schema={objSchema}
           onChange={onChange as (v: Record<string, unknown>) => void}
         />
       );
+    }
 
     case "taggedUnion":
       return (
@@ -166,17 +178,16 @@ export function SchemaField({ value, schema, onChange }: Props) {
       const optSchema = schema as OptionalSchema;
       const enabled = value !== undefined && value !== null;
       return (
-        <div className="flex flex-col gap-1">
-          <label className="flex items-center gap-1.5 cursor-pointer">
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={enabled}
               onChange={(e) => {
                 onChange(e.target.checked ? getDefault(optSchema.inner) : undefined);
               }}
-              className="accent-blue-500"
             />
-            <span className="text-muted text-[10px]">
+            <span className="text-muted text-label">
               {enabled ? "set" : "none"}
             </span>
           </label>

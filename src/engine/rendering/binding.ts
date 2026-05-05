@@ -6,6 +6,21 @@ import type {
   ResourceRegistry,
 } from "../ecs/types";
 
+/** Dispose GPU resources (geometry, materials) reachable from an Object3D. */
+function disposeObject3D(obj: THREE.Object3D): void {
+  obj.removeFromParent();
+  obj.traverse((node) => {
+    if (node instanceof THREE.Mesh) {
+      node.geometry?.dispose();
+      if (Array.isArray(node.material)) {
+        node.material.forEach((m: THREE.Material) => m.dispose());
+      } else {
+        (node.material as THREE.Material)?.dispose();
+      }
+    }
+  });
+}
+
 /**
  * Manages the mapping between ECS entities and Three.js Object3D instances.
  * Listens for entity destruction to automatically clean up scene objects.
@@ -25,7 +40,7 @@ export class ThreeBinding<
       (entity: EntityId) => {
         const obj = this.objectOf.get(entity);
         if (obj) {
-          obj.removeFromParent();
+          disposeObject3D(obj);
           this.objectOf.delete(entity);
         }
       }
@@ -39,17 +54,7 @@ export class ThreeBinding<
   set(entity: EntityId, obj: THREE.Object3D): void {
     const prev = this.objectOf.get(entity);
     if (prev && prev !== obj) {
-      prev.removeFromParent();
-      prev.traverse((node) => {
-        if (node instanceof THREE.Mesh) {
-          node.geometry?.dispose();
-          if (Array.isArray(node.material)) {
-            node.material.forEach((m: THREE.Material) => m.dispose());
-          } else {
-            (node.material as THREE.Material)?.dispose();
-          }
-        }
-      });
+      disposeObject3D(prev);
     }
     this.objectOf.set(entity, obj);
   }
@@ -57,7 +62,7 @@ export class ThreeBinding<
   delete(entity: EntityId): boolean {
     const obj = this.objectOf.get(entity);
     if (obj) {
-      obj.removeFromParent();
+      disposeObject3D(obj);
       this.objectOf.delete(entity);
       return true;
     }
